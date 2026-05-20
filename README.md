@@ -1,5 +1,22 @@
 # threatlocker-mcp
 
+> ## ⚠️ Use at your own risk
+>
+> **This project was primarily "vibe-coded" with AI assistance** and is in **early development**. It is **not production-ready**.
+>
+> - Endpoint mappings come from the published OpenAPI spec but have **not been exhaustively tested** against a live tenant.
+> - The server can perform **destructive actions** (enable/disable protection on computers, approve/deny security requests, move computers between organizations). A malformed call or a hallucinated tool argument from your AI assistant could change your ThreatLocker configuration in ways that affect endpoint security.
+> - There are **no rate-limit protections, no confirmation prompts, no audit logging** beyond what ThreatLocker itself records.
+> - Error messages from the API are surfaced verbatim to your AI assistant; this is convenient for debugging but means the assistant sees raw response bodies.
+>
+> **Recommended posture:**
+> - Test against a non-production / lab tenant first.
+> - Use a ThreatLocker API key with the **minimum permissions** your use case actually requires — don't hand it a full-admin key.
+> - Review every destructive tool call the assistant proposes before letting it execute. In Claude Desktop, individual tool calls require approval by default; **keep that on**.
+> - Treat the API key like portal-admin credentials, because functionally it is one.
+>
+> If you find a bug, please open a GitHub issue. If you find a *security* bug, please contact the maintainer directly rather than filing a public issue.
+
 An [MCP](https://modelcontextprotocol.io/) server that exposes the [ThreatLocker Portal API](https://portalapi.h.threatlocker.com/swagger/index.html) as tools an AI assistant (Claude Desktop, Claude Code, custom clients) can call.
 
 32 tools generated from the official OpenAPI 3.0 spec, with typed Pydantic request bodies, stdio + HTTP transports, and per-call organization override for parent/child tenants.
