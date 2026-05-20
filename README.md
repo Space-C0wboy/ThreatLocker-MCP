@@ -44,14 +44,17 @@ Add this block to your Claude Desktop config (`%APPDATA%\Claude\claude_desktop_c
       "env": {
         "THREATLOCKER_API_KEY": "your-api-key",
         "THREATLOCKER_ORG_ID": "your-default-org-guid",
-        "THREATLOCKER_BASE_URL": "https://portalapi.h.threatlocker.com"
+        "THREATLOCKER_BASE_URL": "https://portalapi.h.threatlocker.com",
+        "PATHEXT": ".COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC;.PY;.PYW"
       }
     }
   }
 }
 ```
 
-Fully quit Claude Desktop (right-click the tray icon → Quit on Windows, ⌘Q on macOS), then reopen. You'll see 32 ThreatLocker tools in the tools menu.
+> **Windows note:** the `PATHEXT` entry is required on Windows. Claude Desktop doesn't pass `PATHEXT` to child processes, which prevents `uv` from finding `git.exe` even when Git is installed and on `PATH`. The error in the log is `Git executable not found`; adding `PATHEXT` fixes it. Non-Windows users can omit the line.
+
+Fully quit Claude Desktop (right-click the tray icon → Quit on Windows, ⌘Q on macOS), then reopen. The first launch takes 30–60 seconds while `uvx` clones the repo and installs dependencies; subsequent launches are instant. You'll see 32 ThreatLocker tools in the tools menu.
 
 To pin a specific version once you tag a release, change the URL to `git+https://github.com/Space-C0wboy/ThreatLocker-MCP@v0.1.0`. To force `uvx` to re-fetch after pushing updates, add `"--refresh"` as the first item in `args`.
 
@@ -190,6 +193,22 @@ These are gaps in ThreatLocker's public API, not this server:
 - **No isolate/release endpoints.** `computer_enable_protection`/`computer_disable_protection` control policy enforcement, not network isolation.
 - **Policy support is read-only by ID.** No list, create, update, or delete via the public API.
 - **No application definitions.** The `Application` endpoints are read-only metadata queries.
+
+## Troubleshooting
+
+Logs live at `%APPDATA%\Claude\logs\mcp-server-threatlocker.log` on Windows and `~/Library/Logs/Claude/mcp-server-threatlocker.log` on macOS. Most problems are visible there in plain text.
+
+**`Git executable not found` on Windows** — Claude Desktop doesn't pass `PATHEXT` to child processes, so `uv` can't recognize `git.exe` as executable. Add the `PATHEXT` entry from the [Configure Claude Desktop](#configure-claude-desktop) example to the `env` block.
+
+**`Could not load app settings ... Expected ',' or '}'`** — JSON syntax error in `claude_desktop_config.json`. Every item in an object needs a comma after it except the last one; when you add a new last item, the previously-last item needs a comma added. Validate the file at [jsonlint.com](https://jsonlint.com/).
+
+**`Configuration error: THREATLOCKER_API_KEY is required`** — the `env` block is missing or has a typo. Each variable needs to be a string in the JSON, not a number or unquoted value.
+
+**Tools menu shows nothing after restart** — confirm Claude Desktop was fully quit (right-click the tray icon → Quit on Windows; the window close button isn't enough). Then check the log for the actual error.
+
+**First launch hangs for 60+ seconds** — that's `uvx` cloning the repo and building dependencies on first use. Normal. Subsequent launches are nearly instant due to the cache.
+
+**After pushing an update, Claude still runs the old version** — `uvx` caches by commit. Add `"--refresh"` as the first item in `args` to force a re-fetch, or pin a version tag (`@v0.2.0`) so updates are explicit.
 
 ## License
 
