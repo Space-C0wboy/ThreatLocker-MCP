@@ -6,7 +6,14 @@ An [MCP](https://modelcontextprotocol.io/) server that exposes the [ThreatLocker
 
 ## Quick start (recommended: `uvx`)
 
-If you don't already have `uv` installed:
+### Prerequisites
+
+- **Git** must be installed and on `PATH`. `uvx` uses it to clone the repo.
+  - Windows: `winget install --id Git.Git -e --source winget`, or download from [git-scm.com](https://git-scm.com/download/win)
+  - macOS: `brew install git` (or use Xcode Command Line Tools)
+  - Linux: `apt install git` / `dnf install git` / etc.
+  - Verify with `git --version` in a fresh terminal.
+- **`uv`** (which provides `uvx`):
 
 **macOS / Linux:**
 ```bash
@@ -18,7 +25,11 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-Then add this block to your Claude Desktop config (`%APPDATA%\Claude\claude_desktop_config.json` on Windows, `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+After installing Git and `uv`, close and reopen any terminal so PATH is refreshed.
+
+### Configure Claude Desktop
+
+Add this block to your Claude Desktop config (`%APPDATA%\Claude\claude_desktop_config.json` on Windows, `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 
 ```json
 {
@@ -27,7 +38,7 @@ Then add this block to your Claude Desktop config (`%APPDATA%\Claude\claude_desk
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/YOUR-USERNAME/threatlocker-mcp",
+        "git+https://github.com/Space-C0wboy/ThreatLocker-MCP",
         "threatlocker-mcp"
       ],
       "env": {
@@ -42,7 +53,7 @@ Then add this block to your Claude Desktop config (`%APPDATA%\Claude\claude_desk
 
 Fully quit Claude Desktop (right-click the tray icon → Quit on Windows, ⌘Q on macOS), then reopen. You'll see 32 ThreatLocker tools in the tools menu.
 
-To pin a specific version once you tag a release, change the URL to `git+https://github.com/YOUR-USERNAME/threatlocker-mcp@v0.1.0`. To force `uvx` to re-fetch after pushing updates, add `"--refresh"` as the first item in `args`.
+To pin a specific version once you tag a release, change the URL to `git+https://github.com/Space-C0wboy/ThreatLocker-MCP@v0.1.0`. To force `uvx` to re-fetch after pushing updates, add `"--refresh"` as the first item in `args`.
 
 ## Tools
 
@@ -103,7 +114,7 @@ The public API has no "list organizations" endpoint, so you'll need to know your
 If you want to hack on the code instead of running it via `uvx`:
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/threatlocker-mcp
+git clone https://github.com/Space-C0wboy/ThreatLocker-MCP
 cd threatlocker-mcp
 python -m venv .venv
 . .venv/bin/activate          # Windows PowerShell: .venv\Scripts\Activate.ps1
