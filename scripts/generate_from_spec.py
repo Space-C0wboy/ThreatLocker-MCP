@@ -1,0 +1,560 @@
+"""Generate Pydantic models and FastMCP tool modules from the ThreatLocker OpenAPI spec.
+
+Usage:
+    python scripts/generate_from_spec.py spec.json
+
+This is a one-shot codegen: it overwrites src/threatlocker_mcp/models.py and the
+tool modules under src/threatlocker_mcp/tools/. Re-run whenever the spec changes.
+
+Design choices:
+- Only the curated CHOSEN_ENDPOINTS list below is wrapped as tools. To expand
+  coverage, add more paths to that list.
+- Schemas referenced (transitively) by any chosen endpoint are emitted as
+  Pydantic models; unused schemas are skipped to keep the file readable.
+- Query/path params become tool function arguments. JSON request bodies become
+  a single typed `body` argument using the generated model.
+"""
+from __future__ import annotations
+
+import json
+import keyword
+import re
+import sys
+from collections import defaultdict
+from pathlib import Path
+from typing import Any
+
+# ---------------------------------------------------------------------------
+# Curated tool surface — (path, method) tuples we want exposed as MCP tools.
+# Keep grouped by tag for readability.
+# ---------------------------------------------------------------------------
+CHOSEN_ENDPOINTS: list[tuple[str, str]] = [
+    # Computer (8)
+    ("/portalapi/Computer/ComputerGetByAllParameters", "post"),
+    ("/portalapi/Computer/ComputerGetForEditById", "get"),
+    ("/portalapi/Computer/ComputerUpdateForEdit", "patch"),
+    ("/portalapi/Computer/ComputerEnableProtection", "post"),
+    ("/portalapi/Computer/ComputerDisableProtection", "post"),
+    ("/portalapi/Computer/ComputerUpdateMaintenanceMode", "post"),
+    ("/portalapi/Computer/ComputerMoveToOtherOrganization", "post"),
+    ("/portalapi/Computer/ComputerUpdateBaselineRescan", "post"),
+    # ApprovalRequest (8)
+    ("/portalapi/ApprovalRequest/ApprovalRequestGetByParameters", "post"),
+    ("/portalapi/ApprovalRequest/ApprovalRequestGetById", "get"),
+    ("/portalapi/ApprovalRequest/ApprovalRequestGetCount", "get"),
+    ("/portalapi/ApprovalRequest/ApprovalRequestGetPermitApplicationById", "get"),
+    ("/portalapi/ApprovalRequest/ApprovalRequestPermitApplication", "post"),
+    ("/portalapi/ApprovalRequest/ApprovalRequestUpdateForReject", "post"),
+    ("/portalapi/ApprovalRequest/ApprovalRequestUpdateForIgnore", "post"),
+    ("/portalapi/ApprovalRequest/ApprovalRequestUpdateForTakeOwnership", "post"),
+    # ActionLog (4)
+    ("/portalapi/ActionLog/ActionLogGetByParametersV2", "post"),
+    ("/portalapi/ActionLog/ActionLogGetByIdV2", "get"),
+    ("/portalapi/ActionLog/ActionLogGetAllForFileHistoryV2", "get"),
+    ("/portalapi/ActionLog/ActionLogGetFileDownloadDetailsById", "get"),
+    # SystemAudit (2)
+    ("/portalapi/SystemAudit/SystemAuditGetByParameters", "post"),
+    ("/portalapi/SystemAudit/SystemAuditGetForHealthCenter", "post"),
+    # ComputerGroup (2)
+    ("/portalapi/ComputerGroup/ComputerGroupGetGroupAndComputer", "get"),
+    ("/portalapi/ComputerGroup/ComputerGroupGetDropdownByOrganizationId", "get"),
+    # MaintenanceMode (3)
+    ("/portalapi/MaintenanceMode/MaintenanceModeGetByComputerId", "get"),
+    ("/portalapi/MaintenanceMode/MaintenanceModeInsert", "post"),
+    ("/portalapi/MaintenanceMode/MaintenanceModeEndById", "patch"),
+    # Application (2)
+    ("/portalapi/Application/ApplicationGetById", "get"),
+    ("/portalapi/Application/ApplicationGetMatchingList", "post"),
+    # Policy (1)
+    ("/portalapi/Policy/PolicyGetById", "get"),
+    # OnlineDevices (1)
+    ("/portalapi/OnlineDevices/OnlineDevicesGetByParameters", "get"),
+    # Report (1)
+    ("/portalapi/Report/ReportGetByOrganizationId", "get"),
+]
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+def snake(name: str) -> str:
+    """CamelCase -> snake_case, avoiding Python keywords and Pydantic BaseModel attrs."""
+    s = re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
+    s = re.sub(r"[^a-z0-9_]+", "_", s).strip("_")
+    # Avoid Python keywords and names that shadow BaseModel methods/attrs.
+    shadowed = {
+        "id", "type", "json", "schema", "fields", "dict",
+        "copy", "construct", "parse_obj", "parse_raw", "validate",
+        "model_dump", "model_config", "model_fields",
+    }
+    if keyword.iskeyword(s) or s in shadowed:
+        s = s + "_"
+    return s
+
+
+def safe_name(name: str) -> str:
+    """Make a string a valid Python identifier."""
+    s = re.sub(r"[^A-Za-z0-9_]", "_", name)
+    if s and s[0].isdigit():
+        s = "_" + s
+    return s
+
+
+def operation_id_to_func(path: str, method: str) -> str:
+    """Turn '/portalapi/Computer/ComputerGetByAllParameters' POST into
+    'computer_get_by_all_parameters'."""
+    tail = path.rsplit("/", 1)[-1]
+    return snake(tail)
+
+
+def collect_referenced_schemas(spec: dict, start_refs: list[str]) -> set[str]:
+    """BFS the $ref graph starting from a list of schema names."""
+    schemas = spec["components"]["schemas"]
+    seen: set[str] = set()
+    queue = list(start_refs)
+    while queue:
+        name = queue.pop()
+        if name in seen or name not in schemas:
+            continue
+        seen.add(name)
+        # walk this schema for more refs
+        def walk(node: Any) -> None:
+            if isinstance(node, dict):
+                for k, v in node.items():
+                    if k == "$ref" and isinstance(v, str):
+                        ref_name = v.rsplit("/", 1)[-1]
+                        if ref_name not in seen:
+                            queue.append(ref_name)
+                    else:
+                        walk(v)
+            elif isinstance(node, list):
+                for item in node:
+                    walk(item)
+        walk(schemas[name])
+    return seen
+
+
+# ---------------------------------------------------------------------------
+# Schema -> Python type
+# ---------------------------------------------------------------------------
+PRIMITIVE_TYPES = {
+    "string": "str",
+    "integer": "int",
+    "number": "float",
+    "boolean": "bool",
+}
+
+
+def py_type_for_schema(schema: dict, models_in_scope: set[str]) -> str:
+    """Translate a JSON-schema fragment into a Python type expression.
+
+    Conservative: anything we don't recognize falls back to Any.
+    """
+    if not isinstance(schema, dict):
+        return "Any"
+
+    if "$ref" in schema:
+        name = schema["$ref"].rsplit("/", 1)[-1]
+        return name if name in models_in_scope else "Any"
+
+    if "allOf" in schema and len(schema["allOf"]) == 1:
+        return py_type_for_schema(schema["allOf"][0], models_in_scope)
+
+    if "oneOf" in schema or "anyOf" in schema:
+        # Take the first option; this API doesn't really use unions meaningfully
+        opts = schema.get("oneOf") or schema.get("anyOf")
+        if opts:
+            return py_type_for_schema(opts[0], models_in_scope)
+        return "Any"
+
+    t = schema.get("type")
+    if t == "array":
+        inner = py_type_for_schema(schema.get("items", {}), models_in_scope)
+        return f"list[{inner}]"
+
+    if t == "object":
+        # additionalProperties dict
+        ap = schema.get("additionalProperties")
+        if isinstance(ap, dict):
+            inner = py_type_for_schema(ap, models_in_scope)
+            return f"dict[str, {inner}]"
+        return "dict[str, Any]"
+
+    if t in PRIMITIVE_TYPES:
+        base = PRIMITIVE_TYPES[t]
+        fmt = schema.get("format")
+        if t == "string" and fmt == "uuid":
+            return "str"  # keep as str; the API accepts string UUIDs
+        if t == "string" and fmt in ("date-time", "date"):
+            return "str"
+        return base
+
+    return "Any"
+
+
+def emit_model(name: str, schema: dict, models_in_scope: set[str]) -> str:
+    """Emit a Pydantic model class for one schema."""
+    if schema.get("type") != "object" and "properties" not in schema:
+        # Type alias for non-object schemas (rare in this API)
+        py = py_type_for_schema(schema, models_in_scope)
+        return f"{name} = {py}\n\n"
+
+    props = schema.get("properties", {})
+    required = set(schema.get("required", []))
+
+    lines = [f"class {name}(BaseModel):"]
+    if not props:
+        lines.append("    model_config = ConfigDict(extra='allow')")
+        lines.append("    pass")
+        lines.append("")
+        return "\n".join(lines) + "\n"
+
+    lines.append("    model_config = ConfigDict(populate_by_name=True, extra='allow')")
+
+    for prop_name, prop_schema in props.items():
+        py_type = py_type_for_schema(prop_schema, models_in_scope)
+        py_field = snake(prop_name)
+        is_required = prop_name in required
+        nullable = prop_schema.get("nullable", False)
+        if not is_required or nullable:
+            py_type = f"Optional[{py_type}]"
+            default = " = None"
+        else:
+            default = ""
+
+        desc = prop_schema.get("description") or prop_schema.get("title")
+        alias_arg = f'alias="{prop_name}"' if py_field != prop_name else ""
+        desc_arg = f'description={desc!r}' if desc else ""
+        field_args = ", ".join(a for a in [
+            "default=None" if default == " = None" else "",
+            alias_arg,
+            desc_arg,
+        ] if a)
+
+        if field_args:
+            lines.append(f"    {py_field}: {py_type} = Field({field_args})")
+        else:
+            lines.append(f"    {py_field}: {py_type}{default}")
+
+    lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# Generators
+# ---------------------------------------------------------------------------
+def generate_models(spec: dict, needed_schemas: set[str]) -> str:
+    schemas = spec["components"]["schemas"]
+
+    # Topologically sort by reference depth so simple types come before composite ones.
+    # Pydantic v2 handles forward refs fine, but ordering keeps the file readable.
+    order: list[str] = []
+    visited: set[str] = set()
+
+    def visit(name: str) -> None:
+        if name in visited or name not in needed_schemas:
+            return
+        visited.add(name)
+        node = schemas.get(name, {})
+        def walk(n: Any) -> None:
+            if isinstance(n, dict):
+                for k, v in n.items():
+                    if k == "$ref" and isinstance(v, str):
+                        visit(v.rsplit("/", 1)[-1])
+                    else:
+                        walk(v)
+            elif isinstance(n, list):
+                for x in n:
+                    walk(x)
+        walk(node)
+        order.append(name)
+
+    for n in sorted(needed_schemas):
+        visit(n)
+
+    parts = [
+        '"""Pydantic models generated from the ThreatLocker OpenAPI spec.',
+        "",
+        "Do not edit by hand. Regenerate via `python scripts/generate_from_spec.py spec.json`.",
+        '"""',
+        "from __future__ import annotations",
+        "",
+        "from typing import Any, Optional",
+        "",
+        "from pydantic import BaseModel, ConfigDict, Field",
+        "",
+        "",
+    ]
+
+    for name in order:
+        parts.append(emit_model(name, schemas[name], needed_schemas))
+
+    # Resolve forward refs (only for actual model classes, not type aliases)
+    parts.append("# Resolve any forward references")
+    for name in order:
+        sch = schemas[name]
+        is_class = sch.get("type") == "object" or "properties" in sch
+        if is_class:
+            parts.append(f"{name}.model_rebuild()")
+    parts.append("")
+
+    return "\n".join(parts)
+
+
+def generate_tools_module(
+    tag: str,
+    ops: list[tuple[str, str, dict]],
+    models_in_scope: set[str],
+) -> str:
+    """Generate a per-tag tool module."""
+    lines = [
+        f'"""ThreatLocker MCP tools for tag: {tag}.',
+        "",
+        "Generated by scripts/generate_from_spec.py. Do not edit by hand.",
+        '"""',
+        "from __future__ import annotations",
+        "",
+        "from typing import Annotated, Any, Optional",
+        "",
+        "from fastmcp import FastMCP",
+        "from pydantic import Field",
+        "",
+        "from ..client import get_client",
+        "from .. import models",
+        "",
+        "",
+        "def register(mcp: FastMCP) -> None:",
+    ]
+
+    for path, method, op in ops:
+        func_name = operation_id_to_func(path, method)
+        summary = (op.get("summary") or op.get("description") or "").strip()
+        # First line only, escaped
+        first_line = summary.split("\n")[0].strip() if summary else f"{method.upper()} {path}"
+        # Full description (cleaned up for the docstring)
+        full_desc = summary.replace("\r\n", "\n").strip() or first_line
+
+        # Build argument list as (text, has_default) so we can sort.
+        required_args: list[str] = []
+        optional_args: list[str] = []
+        params_dict_items: list[tuple[str, str]] = []  # (py_name, source_name)
+        body_arg: Optional[str] = None  # noqa: F821
+
+        parameters = op.get("parameters", [])
+        query_params = [p for p in parameters if p.get("in") == "query"]
+        header_params = [
+            p for p in parameters
+            if p.get("in") == "header"
+            and p.get("name") not in ("Authorization", "ManagedOrganizationId", "OverrideManagedOrganizationId")
+        ]
+
+        for p in query_params:
+            name = p["name"]
+            py_name = snake(name)
+            sch = p.get("schema", {})
+            py_type = py_type_for_schema(sch, models_in_scope)
+            required = p.get("required", False)
+            desc = (p.get("description") or "").replace("\n", " ").strip()
+            desc_kw = f"description={desc!r}, " if desc else ""
+            if required:
+                if desc:
+                    required_args.append(f"        {py_name}: Annotated[{py_type}, Field(description={desc!r})]")
+                else:
+                    required_args.append(f"        {py_name}: {py_type}")
+            else:
+                opt_type = f"Optional[{py_type}]"
+                optional_args.append(
+                    f"        {py_name}: Annotated[{opt_type}, Field({desc_kw}default=None)] = None"
+                )
+            params_dict_items.append((py_name, name))
+
+        # Custom (non-auth) header params, if any
+        for p in header_params:
+            name = p["name"]
+            py_name = snake(name)
+            optional_args.append(
+                f'        {py_name}: Annotated[Optional[str], Field(description="Header: {name}", default=None)] = None'
+            )
+
+        # Request body
+        body_schema_ref = None
+        req_body = op.get("requestBody") or {}
+        content = req_body.get("content", {}).get("application/json", {})
+        if content:
+            sch = content.get("schema", {})
+            if "$ref" in sch:
+                body_schema_ref = sch["$ref"].rsplit("/", 1)[-1]
+            elif sch.get("type") == "array" and "$ref" in sch.get("items", {}):
+                inner = sch["items"]["$ref"].rsplit("/", 1)[-1]
+                body_schema_ref = f"list[models.{inner}]"
+
+        if body_schema_ref:
+            if body_schema_ref.startswith("list["):
+                # required — no default
+                required_args.append(
+                    f'        body: Annotated[{body_schema_ref}, Field(description="Request body (array).")]'
+                )
+            else:
+                required_args.append(
+                    f'        body: Annotated[models.{body_schema_ref}, Field(description="Request body.")]'
+                )
+            body_arg = body_schema_ref
+
+        # Org override is always optional
+        optional_args.append('        organization_id: Annotated[Optional[str], Field(description="Override the default organization (ManagedOrganizationId header).", default=None)] = None')
+        optional_args.append('        override_organization_id: Annotated[Optional[str], Field(description="Optional OverrideManagedOrganizationId header.", default=None)] = None')
+
+        # Required args first, optional args (with defaults) after. Python syntax requires this.
+        args = required_args + optional_args
+        sig = ",\n".join(args)
+        docstring_desc = full_desc.replace('"""', "'''")[:600]
+
+        # Body of function
+        params_build = ""
+        if params_dict_items:
+            items_code = ", ".join(f'"{src}": {var}' for var, src in params_dict_items)
+            params_build = (
+                f"        params = {{{items_code}}}\n"
+                f"        params = {{k: v for k, v in params.items() if v is not None}}\n"
+            )
+
+        if body_arg:
+            if body_arg.startswith("list["):
+                body_line = "        body_json = [b.model_dump(by_alias=True, exclude_none=True) for b in body]\n"
+            else:
+                body_line = "        body_json = body.model_dump(by_alias=True, exclude_none=True)\n"
+        else:
+            body_line = ""
+
+        # extra_headers for OverrideManagedOrganizationId etc.
+        header_block = (
+            "        extra_headers = {}\n"
+            "        if override_organization_id is not None:\n"
+            "            extra_headers['OverrideManagedOrganizationId'] = override_organization_id\n"
+        )
+        # custom header params (rare)
+        for p in header_params:
+            name = p["name"]
+            py_name = snake(name)
+            header_block += (
+                f"        if {py_name} is not None:\n"
+                f"            extra_headers[{name!r}] = {py_name}\n"
+            )
+
+        call_kwargs = ["organization_id=organization_id"]
+        if params_dict_items:
+            call_kwargs.append("params=params")
+        if body_arg:
+            call_kwargs.append("json=body_json")
+        call_kwargs.append("extra_headers=extra_headers or None")
+        call_kwargs_str = ", ".join(call_kwargs)
+
+        body_lines = []
+        if params_build:
+            body_lines.append(params_build.rstrip("\n"))
+        if body_line:
+            body_lines.append(body_line.rstrip("\n"))
+        body_lines.append(header_block.rstrip("\n"))
+        body_lines.append("        client = await get_client()")
+        body_lines.append(
+            f'        return await client.request("{method.upper()}", "{path}", {call_kwargs_str})'
+        )
+
+        tool_block = (
+            f'    @mcp.tool(name="{func_name}", description={first_line[:200]!r})\n'
+            f"    async def {func_name}(\n"
+            f"{sig},\n"
+            f"    ) -> Any:\n"
+            f'        """{docstring_desc}"""\n'
+        )
+        tool_block += "\n".join(body_lines) + "\n\n"
+        lines.append(tool_block)
+
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Driver
+# ---------------------------------------------------------------------------
+def main() -> int:
+    if len(sys.argv) != 2:
+        print("usage: generate_from_spec.py <spec.json>", file=sys.stderr)
+        return 2
+
+    spec_path = Path(sys.argv[1])
+    spec = json.loads(spec_path.read_text())
+
+    # Walk chosen ops to find which schemas we need
+    schema_seed: list[str] = []
+    chosen_ops_by_tag: dict[str, list[tuple[str, str, dict]]] = defaultdict(list)
+    for path, method in CHOSEN_ENDPOINTS:
+        item = spec["paths"].get(path)
+        if not item or method not in item:
+            print(f"WARNING: missing endpoint {method.upper()} {path}", file=sys.stderr)
+            continue
+        op = item[method]
+        tag = (op.get("tags") or ["Misc"])[0]
+        chosen_ops_by_tag[tag].append((path, method, op))
+
+        # Collect refs from this op
+        def walk(n: Any) -> None:
+            if isinstance(n, dict):
+                for k, v in n.items():
+                    if k == "$ref" and isinstance(v, str):
+                        schema_seed.append(v.rsplit("/", 1)[-1])
+                    else:
+                        walk(v)
+            elif isinstance(n, list):
+                for x in n:
+                    walk(x)
+        walk(op)
+
+    needed = collect_referenced_schemas(spec, schema_seed)
+    print(f"Chosen endpoints: {sum(len(v) for v in chosen_ops_by_tag.values())}", file=sys.stderr)
+    print(f"Schemas to generate: {len(needed)}", file=sys.stderr)
+
+    # Write models
+    pkg_dir = Path(__file__).resolve().parent.parent / "src" / "threatlocker_mcp"
+    models_path = pkg_dir / "models.py"
+    models_path.write_text(generate_models(spec, needed))
+    print(f"Wrote {models_path}", file=sys.stderr)
+
+    # Write tools per tag
+    tools_dir = pkg_dir / "tools"
+    tools_dir.mkdir(exist_ok=True)
+
+    # Clear out old tool modules (everything but __init__.py)
+    for f in tools_dir.glob("*.py"):
+        if f.name != "__init__.py":
+            f.unlink()
+
+    tag_modules: list[str] = []
+    for tag, ops in sorted(chosen_ops_by_tag.items()):
+        module_name = snake(tag)
+        tag_modules.append((tag, module_name))
+        out = generate_tools_module(tag, ops, needed)
+        (tools_dir / f"{module_name}.py").write_text(out)
+        print(f"Wrote tools/{module_name}.py ({len(ops)} tools)", file=sys.stderr)
+
+    # Write tools/__init__.py
+    init_lines = [
+        '"""Generated tool registry."""',
+        "from fastmcp import FastMCP",
+        "",
+    ]
+    for _tag, mod in tag_modules:
+        init_lines.append(f"from . import {mod}")
+    init_lines.append("")
+    init_lines.append("")
+    init_lines.append("def register_all(mcp: FastMCP) -> None:")
+    for _tag, mod in tag_modules:
+        init_lines.append(f"    {mod}.register(mcp)")
+    init_lines.append("")
+    (tools_dir / "__init__.py").write_text("\n".join(init_lines))
+    print(f"Wrote tools/__init__.py", file=sys.stderr)
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
