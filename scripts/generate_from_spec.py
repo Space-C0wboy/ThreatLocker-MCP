@@ -97,6 +97,7 @@ DESCRIPTION_OVERRIDES: dict[tuple[str, str], str] = {
         " Always send full null-filled stub sub-objects (`matchingApplication`,"
         " `existingApplication`, `selectedComputerGroup`) rather than omitting"
         " them. Wrong shape returns opaque HTTP 500 with no field-level hint."
+        " NOTE: `statusId` is required (e.g. 1 for Pending). Calls without it return HTTP 500."
     ),
 }
 
