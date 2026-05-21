@@ -346,29 +346,55 @@ def emit_model(name: str, schema: dict, models_in_scope: set[str]) -> str:
         py_field = snake(prop_name)
         is_required = prop_name in required
         nullable = prop_schema.get("nullable", False)
-        if not is_required or nullable:
+        spec_type = prop_schema.get("type")
+
+        # Non-nullable primitives (integer / number / boolean) get their type's
+        # natural zero default rather than `T | None = None`. The ThreatLocker
+        # API rejects `null` for these fields with HTTP 400 even though the
+        # spec doesn't list them in `required` — C# value-type semantics, where
+        # absent ~= zero but null is invalid. Verified end-to-end against the
+        # permit_application endpoint after exclude_none=False was enabled.
+        is_non_nullable_primitive = (
+            spec_type in {"integer", "number", "boolean"} and not nullable
+        )
+
+        if is_non_nullable_primitive:
+            # Honor an explicit spec `default` if present, else use the type's zero.
+            spec_default = prop_schema.get("default")
+            if spec_type == "boolean":
+                default_expr = (
+                    "True" if spec_default is True else "False"
+                )
+            elif spec_type == "integer":
+                default_expr = (
+                    str(spec_default) if isinstance(spec_default, int) else "0"
+                )
+            else:  # number
+                default_expr = (
+                    str(spec_default)
+                    if isinstance(spec_default, (int, float))
+                    else "0.0"
+                )
+        elif not is_required or nullable:
             py_type = f"{py_type} | None"
-            default = " = None"
+            default_expr = "None"
         else:
-            default = ""
+            default_expr = None  # required + non-primitive: no default emitted
 
         desc = prop_schema.get("description") or prop_schema.get("title")
         alias_arg = f'alias="{prop_name}"' if py_field != prop_name else ""
         desc_arg = f"description={desc!r}" if desc else ""
+        default_arg = f"default={default_expr}" if default_expr is not None else ""
         field_args = ", ".join(
-            a
-            for a in [
-                "default=None" if default == " = None" else "",
-                alias_arg,
-                desc_arg,
-            ]
-            if a
+            a for a in [default_arg, alias_arg, desc_arg] if a
         )
 
         if field_args:
             lines.append(f"    {py_field}: {py_type} = Field({field_args})")
+        elif default_expr is not None:
+            lines.append(f"    {py_field}: {py_type} = {default_expr}")
         else:
-            lines.append(f"    {py_field}: {py_type}{default}")
+            lines.append(f"    {py_field}: {py_type}")
 
     lines.append("")
     return "\n".join(lines) + "\n"

@@ -209,7 +209,13 @@ async def test_generated_tool_serializes_body_with_aliases(httpx_mock, monkeypat
     import json as _json
 
     sent = _json.loads(request.content)
-    assert sent == {"searchText": "srv-01", "pageSize": 50}
+    # User-provided fields land with the right camelCase aliases and values.
+    assert sent["searchText"] == "srv-01"
+    assert sent["pageSize"] == 50
+    # Non-nullable primitives (spec marks `nullable: false`) get their natural
+    # zero/spec-default value rather than `null`, so they may also appear in
+    # the body — that matches what the portal SPA sends and what the C# API
+    # expects. The test no longer asserts a strict equality on the body.
     assert request.headers["Authorization"] == "test-key"
     assert request.headers["ManagedOrganizationId"] == "default-org"
 
@@ -249,7 +255,9 @@ async def test_approval_request_tool_camel_case(httpx_mock, monkeypatch, config)
     import json as _json
 
     sent = _json.loads(httpx_mock.get_request().content)
-    assert sent == {"statusId": 1, "pageSize": 25, "showChildOrganizations": True}
+    assert sent["statusId"] == 1
+    assert sent["pageSize"] == 25
+    assert sent["showChildOrganizations"] is True
 
     await test_client.close()
 
