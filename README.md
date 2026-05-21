@@ -6,7 +6,7 @@
 
 An [MCP](https://modelcontextprotocol.io/) server that exposes the [ThreatLocker Portal API](https://portalapi.h.threatlocker.com/swagger/index.html) as callable tools for AI assistants such as Claude Desktop and Claude Code.
 
-32 tools are generated directly from the official OpenAPI 3.0 spec, with fully-typed Pydantic request bodies, stdio and HTTP transports, and per-call organization override for parent/child tenant setups.
+33 tools are generated directly from the official OpenAPI 3.0 spec, with fully-typed Pydantic request bodies, stdio and HTTP transports, and per-call organization override for parent/child tenant setups.
 
 ---
 
@@ -101,7 +101,7 @@ Add the following block to your Claude Desktop configuration file:
 
 > **Windows note:** The `PATHEXT` entry is required. Claude Desktop does not pass `PATHEXT` to child processes, which prevents `uv` from locating `git.exe` even when Git is installed. The symptom is a `Git executable not found` error in the log. Non-Windows users can omit that line.
 
-Fully quit Claude Desktop (tray icon → **Quit** on Windows; **⌘Q** on macOS), then reopen it. The first launch takes 30–60 seconds while `uvx` clones the repository and installs dependencies. Subsequent launches are nearly instant due to caching. You should see 32 ThreatLocker tools listed in the tools menu.
+Fully quit Claude Desktop (tray icon → **Quit** on Windows; **⌘Q** on macOS), then reopen it. The first launch takes 30–60 seconds while `uvx` clones the repository and installs dependencies. Subsequent launches are nearly instant due to caching. You should see 33 ThreatLocker tools listed in the tools menu.
 
 **Pinning a version:** Once a release is tagged, replace the URL with `git+https://github.com/Space-C0wboy/ThreatLocker-MCP@v0.1.0` to lock to a specific version.
 
@@ -123,6 +123,7 @@ Fully quit Claude Desktop (tray icon → **Quit** on Windows; **⌘Q** on macOS)
 | **Policy** | 1 | Get by ID |
 | **Online Devices** | 1 | Get by parameters |
 | **Reports** | 1 | Get by organization |
+| **Organization** | 1 | `list_organizations` — discover org GUIDs this API key can target |
 
 All request bodies are typed Pydantic models (54 generated from the spec), so the AI assistant receives full schema validation and autocomplete. The wire format preserves the original camelCase field names expected by the API.
 
@@ -151,7 +152,7 @@ Every tool accepts two optional parameters for targeting specific organizations 
 - **`organization_id`** — overrides the `ManagedOrganizationId` request header. When omitted, `THREATLOCKER_ORG_ID` is used.
 - **`override_organization_id`** — sets the `OverrideManagedOrganizationId` header for scenarios that require both headers simultaneously.
 
-> **Finding child org GUIDs:** The public API does not expose a "list organizations" endpoint. Org GUIDs can be found in the portal URL while switched into each child org, or on the Organization settings page.
+> **Finding child org GUIDs:** Call `list_organizations` first — optionally with `search_text` to filter by display name — to enumerate every org this API key can target. (Under the hood this hits `/portalapi/Organization/OrganizationGetForMoveComputers`, the same endpoint the portal uses to populate its move-computer org picker.) Org GUIDs can also be read from the portal URL while switched into each child org.
 
 ---
 
@@ -194,7 +195,7 @@ pip install -e ".[dev]"
 # Set up environment
 cp .env.example .env   # then fill in your values
 
-# Run the test suite (15 tests, all mocked — no live API calls)
+# Run the test suite (22 tests, all mocked — no live API calls)
 pytest
 
 # Verify the CLI
@@ -229,6 +230,18 @@ This overwrites `src/threatlocker_mcp/models.py` and all tool modules under `src
 
 To add or remove tools from the curated set, edit the `CHOSEN_ENDPOINTS` list at the top of `scripts/generate_from_spec.py` and regenerate.
 
+The generator exposes five override tables for spec-vs-reality quirks, all near the top of the script:
+
+| Override | When to use |
+|----------|-------------|
+| `DESCRIPTION_OVERRIDES` | Append guidance to a tool's description — e.g. document a field the spec marks optional but the server actually requires. |
+| `REQUIRED_PARAM_OVERRIDES` | Promote a swagger-optional query/header param to a required argument so callers fail loudly instead of getting an opaque 417. |
+| `TOOL_NAME_OVERRIDES` | Rename the LLM-facing tool name (the underlying path/method is unchanged). This is how `OrganizationGetForMoveComputers` is surfaced as `list_organizations`. |
+| `PROPERTY_NAME_OVERRIDES` | Map mis-cased spec property names to their canonical live-API form so the on-the-wire JSON matches what the server expects. |
+| `SEND_FULL_BODY_OVERRIDES` | Force `model_dump(exclude_none=False)` on endpoints that distinguish missing fields from `null`. |
+
+After editing the generator or its overrides, run `ruff format .` to normalize the regenerated files before committing.
+
 ---
 
 ## Project Layout
@@ -255,11 +268,12 @@ ThreatLocker-MCP/
 │       ├── computer_group.py
 │       ├── maintenance_mode.py
 │       ├── online_devices.py
+│       ├── organization.py
 │       ├── policy.py
 │       ├── report.py
 │       └── system_audit.py
 └── tests/
-    └── test_client.py               # 15 tests; all mocked, no live API calls required
+    └── test_client.py               # 22 tests; all mocked, no live API calls required
 ```
 
 ---
@@ -279,7 +293,6 @@ The following are gaps in ThreatLocker's public API, not limitations of this ser
 
 | Limitation | Detail |
 |-----------|--------|
-| No organization listing | Child-org GUIDs must be obtained out-of-band (portal URL or settings page) |
 | No network isolation | `computer_enable_protection` / `computer_disable_protection` toggle policy enforcement, not network isolation |
 | Policy management is read-only | Policies can be retrieved by ID only; create, update, and delete are not available via the public API |
 | Application data is read-only | The `Application` endpoints return metadata only |
@@ -293,6 +306,7 @@ These are server-side oddities worth knowing when an LLM is driving the tools:
 - **`action_log_get_by_parameters_v2` needs *both* date-range encodings.** The OpenAPI schema lists `dateTime` (an array of two ISO 8601 strings) *and* `startDate`/`endDate` as separate fields. In practice the API rejects requests that supply only one — supply the same window in **both** forms. Example: `{"sourceTableId": 1, "dateTime": ["2026-05-19T00:00:00Z","2026-05-20T23:59:59Z"], "startDate": "2026-05-19T00:00:00Z", "endDate": "2026-05-20T23:59:59Z", "pageSize": 25, "pageNumber": 1}`.
 - **`approval_request_get_by_parameters` needs `statusId`.** Without it the server returns HTTP 500. Use `statusId=1` for pending requests.
 - **Empty responses surface as `{"_empty_response": true, "_status_code": 200}`.** Several ThreatLocker endpoints reply with HTTP 200 + either an empty body or the JSON literal `null` when there are no matching rows — the client converts both to this sentinel object so it isn't silently dropped.
+- **Transient errors are retried up to 3 times.** The client retries `429`, `500`, `502`, `503`, `504`, and network errors. When the server sends a `Retry-After` header (either delta-seconds or HTTP-date), it's honored and capped at 60s; otherwise backoff is exponential with AWS-style full jitter so concurrent retriers don't herd. `4xx` other than `429` are surfaced immediately without retry.
 
 ## Troubleshooting
 
