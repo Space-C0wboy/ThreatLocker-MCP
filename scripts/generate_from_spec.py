@@ -35,14 +35,93 @@ from typing import Any
 # actually requires.
 DESCRIPTION_OVERRIDES: dict[tuple[str, str], str] = {
     ("/portalapi/ActionLog/ActionLogGetByParametersV2", "post"): (
-        " NOTE: the API requires the date range supplied in BOTH `dateTime` (array of"
-        " two ISO 8601 strings) AND `startDate`/`endDate` -- passing only one returns"
-        " 417 'Invalid Date Range' or HTTP 500."
+        " NOTE: body must include `sourceTableId` (1=ActionLog, 2=DenyActionLog,"
+        " 3=BaselineActionLog, 4=EventLogActionLog) AND the date range supplied in"
+        " BOTH `dateTime` (array of two ISO 8601 strings) AND `startDate`/`endDate`."
+        " Omitting `sourceTableId` returns HTTP 500; supplying only one date form"
+        " returns 417 'Invalid Date Range' or HTTP 500. Do NOT set the `usenewsearch`"
+        " header to true -- it currently triggers HTTP 500."
     ),
     ("/portalapi/ApprovalRequest/ApprovalRequestGetByParameters", "post"): (
         " NOTE: `statusId` is required (e.g. 1 for Pending). Calls without it return"
-        " HTTP 500."
+        " HTTP 500. Each result's `requestorReason` is base64-encoded -- decode before"
+        " display. For the decoded reason plus richer file/policy context, follow up"
+        " with `approval_request_get_permit_application_by_id`."
     ),
+    ("/portalapi/ApprovalRequest/ApprovalRequestGetById", "get"): (
+        " NOTE: `requestorReason` is base64-encoded -- decode before display."
+        " `approval_request_get_permit_application_by_id` returns the same request"
+        " with the reason already decoded under `fileDetails.requestorReason`, plus"
+        " file/policy/ringfencing context."
+    ),
+    ("/portalapi/ActionLog/ActionLogGetAllForFileHistoryV2", "get"): (
+        " NOTE: spec marks every parameter optional, but the API returns 417 'Missing"
+        " Parameters. Unable to load details.' unless `fullPath` plus one of"
+        " (`hostname`, `computerId`) is supplied."
+    ),
+    ("/portalapi/ComputerGroup/ComputerGroupGetGroupAndComputer", "get"): (
+        " NOTE: this endpoint can return very large payloads (>100KB for a single"
+        " populated group) when called without scoping. Pass a specific"
+        " `computerGroupId` and set only the `include_*` flags you actually need;"
+        " unscoped calls may exceed downstream output limits."
+    ),
+    ("/portalapi/ApprovalRequest/ApprovalRequestPermitApplication", "post"): (
+        " NOTE: workflow is take_ownership -> get_permit_application_by_id ->"
+        " permit_application. Start from the DTO returned by"
+        " get_permit_application_by_id and apply the choices below."
+        " App selection -- set exactly ONE of three modes on `matchingApplications`"
+        " (preference order):"
+        " (a) PREFERRED -- use the auto-matched app when"
+        " `hasMatchingApplication: true`. Set `useMatchingApplication: true`,"
+        " populate `matchingApplication` with the suggested app, leave"
+        " `existingApplication` as the null-filled stub, set"
+        " `useExistingApplication: false` and `useNewApplication: false`."
+        " (b) FALLBACK -- add the file to a different existing app (closest"
+        " match by name/vendor). Set `useExistingApplication: true`, populate"
+        " `existingApplication: {applicationId, applicationName, organizationId,"
+        " osType, ...}`, leave the others as null-filled stubs."
+        " (c) LAST RESORT -- create a new app. Set `useNewApplication: true`."
+        " `newApplicationName` may be null; the API derives it from the file."
+        " Scope -- set exactly ONE on `policyLevel`:"
+        " * This Computer (default): all three flags false"
+        " (`toEntireOrganization`/`toComputerGroup`/`toComputer`); scope is"
+        " inferred from top-level `computerId`."
+        " * Computer group: `toComputerGroup: true`, populate"
+        " `selectedComputerGroup: {computerGroupId, name, organizationId,"
+        " osType, isGlobal}`, and set top-level `computerGroupId`."
+        " * Entire organization: `toEntireOrganization: true`; leave"
+        " `selectedComputerGroup` as null-filled stub."
+        " Action -- for elevate requests set `isElevationRequest: true` and"
+        " `isExecutionRequest: false`; for execute reverse them. Both are"
+        " spec-readOnly but MUST be sent matching the actual action type."
+        " Always send full null-filled stub sub-objects (`matchingApplication`,"
+        " `existingApplication`, `selectedComputerGroup`) rather than omitting"
+        " them. Wrong shape returns opaque HTTP 500 with no field-level hint."
+    ),
+}
+
+# Query/header params the API actually requires but that the spec marks optional.
+# Keys are (path, method); values are sets of swagger parameter names. Listed names
+# get promoted to required in the generated tool signature so callers fail loudly
+# instead of getting an opaque 417 from the server. Only use this when the swagger
+# unambiguously needs one specific field -- if the API accepts either of two
+# alternatives (e.g. hostname OR computerId), document it in DESCRIPTION_OVERRIDES
+# instead, since a single-param promotion can't express one-of semantics.
+REQUIRED_PARAM_OVERRIDES: dict[tuple[str, str], set[str]] = {}
+
+# Endpoints that need the full DTO serialized -- including explicit `null` fields --
+# rather than the default `exclude_none=True` behavior. Most ThreatLocker endpoints
+# tolerate stripped nulls (they're queries/filters), but a few permit-style endpoints
+# treat absent fields differently from `null` and reject the request with HTTP 500
+# when nulls are dropped. Add (path, method) tuples here when you confirm an endpoint
+# needs the full shape.
+SEND_FULL_BODY_OVERRIDES: set[tuple[str, str]] = {
+    # Permit requires explicit `null` values on policyExpirationDate,
+    # elevationExpirationDate, isExecutionRequest, isRingfenced, and the null-filled
+    # sub-objects under matchingApplications / policyLevel. Stripping them returns
+    # an opaque HTTP 500. Verified by diffing our failing body against the captured
+    # working portal traffic on 2026-05-21.
+    ("/portalapi/ApprovalRequest/ApprovalRequestPermitApplication", "post"),
 }
 
 
@@ -408,12 +487,13 @@ def generate_tools_module(
             not in ("Authorization", "ManagedOrganizationId", "OverrideManagedOrganizationId")
         ]
 
+        forced_required = REQUIRED_PARAM_OVERRIDES.get((path, method), set())
         for p in query_params:
             name = p["name"]
             py_name = snake(name)
             sch = p.get("schema", {})
             py_type = py_type_for_schema(sch, models_in_scope)
-            required = p.get("required", False)
+            required = p.get("required", False) or name in forced_required
             desc = (p.get("description") or "").replace("\n", " ").strip()
             desc_kw = f"description={desc!r}, " if desc else ""
             if required:
@@ -473,7 +553,7 @@ def generate_tools_module(
         # Required args first, optional args (with defaults) after. Python syntax requires this.
         args = required_args + optional_args
         sig = ",\n".join(args)
-        docstring_desc = full_desc.replace('"""', "'''")[:600]
+        docstring_desc = full_desc.replace('"""', "'''")[:4000]
 
         # Body of function
         params_build = ""
@@ -485,11 +565,14 @@ def generate_tools_module(
             )
 
         if body_arg:
+            exclude_none = (path, method) not in SEND_FULL_BODY_OVERRIDES
             if body_arg.startswith("list["):
-                body_line = "        body_json = [b.model_dump(by_alias=True, exclude_none=True) for b in body]\n"
+                body_line = (
+                    f"        body_json = [b.model_dump(by_alias=True, exclude_none={exclude_none}) for b in body]\n"
+                )
             else:
                 body_line = (
-                    "        body_json = body.model_dump(by_alias=True, exclude_none=True)\n"
+                    f"        body_json = body.model_dump(by_alias=True, exclude_none={exclude_none})\n"
                 )
         else:
             body_line = ""
@@ -529,7 +612,7 @@ def generate_tools_module(
         )
 
         tool_block = (
-            f'    @mcp.tool(name="{func_name}", description={first_line[:600]!r})\n'
+            f'    @mcp.tool(name="{func_name}", description={first_line[:4000]!r})\n'
             f"    async def {func_name}(\n"
             f"{sig},\n"
             f"    ) -> Any:\n"

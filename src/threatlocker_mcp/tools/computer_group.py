@@ -14,7 +14,10 @@ from ..client import get_client
 
 
 def register(mcp: FastMCP) -> None:
-    @mcp.tool(name="computer_group_get_group_and_computer", description="Get Groups and Computer")
+    @mcp.tool(
+        name="computer_group_get_group_and_computer",
+        description="Get Groups and Computer NOTE: this endpoint can return very large payloads (>100KB for a single populated group) when called without scoping. Pass a specific `computerGroupId` and set only the `include_*` flags you actually need; unscoped calls may exceed downstream output limits.",
+    )
     async def computer_group_get_group_and_computer(
         computer_group_id: Annotated[str | None, Field(default=None)] = None,
         o_s_type: Annotated[int | None, Field(default=None)] = None,
@@ -41,7 +44,7 @@ def register(mcp: FastMCP) -> None:
             Field(description="Optional OverrideManagedOrganizationId header.", default=None),
         ] = None,
     ) -> Any:
-        """Get Groups and Computer"""
+        """Get Groups and Computer NOTE: this endpoint can return very large payloads (>100KB for a single populated group) when called without scoping. Pass a specific `computerGroupId` and set only the `include_*` flags you actually need; unscoped calls may exceed downstream output limits."""
         params = {
             "ComputerGroupId": computer_group_id,
             "OSType": o_s_type,

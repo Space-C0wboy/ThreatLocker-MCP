@@ -17,7 +17,7 @@ from ..client import get_client
 def register(mcp: FastMCP) -> None:
     @mcp.tool(
         name="approval_request_get_by_parameters",
-        description="Approval Request: Get By Parameters NOTE: `statusId` is required (e.g. 1 for Pending). Calls without it return HTTP 500.",
+        description="Approval Request: Get By Parameters NOTE: `statusId` is required (e.g. 1 for Pending). Calls without it return HTTP 500. Each result's `requestorReason` is base64-encoded -- decode before display. For the decoded reason plus richer file/policy context, follow up with `approval_request_get_permit_application_by_id`.",
     )
     async def approval_request_get_by_parameters(
         body: Annotated[models.ApprovalRequestParametersDto, Field(description="Request body.")],
@@ -33,7 +33,7 @@ def register(mcp: FastMCP) -> None:
             Field(description="Optional OverrideManagedOrganizationId header.", default=None),
         ] = None,
     ) -> Any:
-        """Approval Request: Get By Parameters NOTE: `statusId` is required (e.g. 1 for Pending). Calls without it return HTTP 500."""
+        """Approval Request: Get By Parameters NOTE: `statusId` is required (e.g. 1 for Pending). Calls without it return HTTP 500. Each result's `requestorReason` is base64-encoded -- decode before display. For the decoded reason plus richer file/policy context, follow up with `approval_request_get_permit_application_by_id`."""
         body_json = body.model_dump(by_alias=True, exclude_none=True)
         extra_headers = {}
         if override_organization_id is not None:
@@ -47,7 +47,10 @@ def register(mcp: FastMCP) -> None:
             extra_headers=extra_headers or None,
         )
 
-    @mcp.tool(name="approval_request_get_by_id", description="Get Approval Request By ID")
+    @mcp.tool(
+        name="approval_request_get_by_id",
+        description="Get Approval Request By ID NOTE: `requestorReason` is base64-encoded -- decode before display. `approval_request_get_permit_application_by_id` returns the same request with the reason already decoded under `fileDetails.requestorReason`, plus file/policy/ringfencing context.",
+    )
     async def approval_request_get_by_id(
         approval_request_id: Annotated[str | None, Field(default=None)] = None,
         organization_id: Annotated[
@@ -62,7 +65,7 @@ def register(mcp: FastMCP) -> None:
             Field(description="Optional OverrideManagedOrganizationId header.", default=None),
         ] = None,
     ) -> Any:
-        """Get Approval Request By ID"""
+        """Get Approval Request By ID NOTE: `requestorReason` is base64-encoded -- decode before display. `approval_request_get_permit_application_by_id` returns the same request with the reason already decoded under `fileDetails.requestorReason`, plus file/policy/ringfencing context."""
         params = {"approvalRequestId": approval_request_id}
         params = {k: v for k, v in params.items() if v is not None}
         extra_headers = {}
@@ -141,7 +144,8 @@ def register(mcp: FastMCP) -> None:
         )
 
     @mcp.tool(
-        name="approval_request_permit_application", description="Approve Permit Application Request"
+        name="approval_request_permit_application",
+        description="Approve Permit Application Request NOTE: workflow is take_ownership -> get_permit_application_by_id -> permit_application. Start from the DTO returned by get_permit_application_by_id and apply the choices below. App selection -- set exactly ONE of three modes on `matchingApplications` (preference order): (a) PREFERRED -- use the auto-matched app when `hasMatchingApplication: true`. Set `useMatchingApplication: true`, populate `matchingApplication` with the suggested app, leave `existingApplication` as the null-filled stub, set `useExistingApplication: false` and `useNewApplication: false`. (b) FALLBACK -- add the file to a different existing app (closest match by name/vendor). Set `useExistingApplication: true`, populate `existingApplication: {applicationId, applicationName, organizationId, osType, ...}`, leave the others as null-filled stubs. (c) LAST RESORT -- create a new app. Set `useNewApplication: true`. `newApplicationName` may be null; the API derives it from the file. Scope -- set exactly ONE on `policyLevel`: * This Computer (default): all three flags false (`toEntireOrganization`/`toComputerGroup`/`toComputer`); scope is inferred from top-level `computerId`. * Computer group: `toComputerGroup: true`, populate `selectedComputerGroup: {computerGroupId, name, organizationId, osType, isGlobal}`, and set top-level `computerGroupId`. * Entire organization: `toEntireOrganization: true`; leave `selectedComputerGroup` as null-filled stub. Action -- for elevate requests set `isElevationRequest: true` and `isExecutionRequest: false`; for execute reverse them. Both are spec-readOnly but MUST be sent matching the actual action type. Always send full null-filled stub sub-objects (`matchingApplication`, `existingApplication`, `selectedComputerGroup`) rather than omitting them. Wrong shape returns opaque HTTP 500 with no field-level hint.",
     )
     async def approval_request_permit_application(
         body: Annotated[models.PermitApplicationDto, Field(description="Request body.")],
@@ -157,8 +161,8 @@ def register(mcp: FastMCP) -> None:
             Field(description="Optional OverrideManagedOrganizationId header.", default=None),
         ] = None,
     ) -> Any:
-        """Approve Permit Application Request"""
-        body_json = body.model_dump(by_alias=True, exclude_none=True)
+        """Approve Permit Application Request NOTE: workflow is take_ownership -> get_permit_application_by_id -> permit_application. Start from the DTO returned by get_permit_application_by_id and apply the choices below. App selection -- set exactly ONE of three modes on `matchingApplications` (preference order): (a) PREFERRED -- use the auto-matched app when `hasMatchingApplication: true`. Set `useMatchingApplication: true`, populate `matchingApplication` with the suggested app, leave `existingApplication` as the null-filled stub, set `useExistingApplication: false` and `useNewApplication: false`. (b) FALLBACK -- add the file to a different existing app (closest match by name/vendor). Set `useExistingApplication: true`, populate `existingApplication: {applicationId, applicationName, organizationId, osType, ...}`, leave the others as null-filled stubs. (c) LAST RESORT -- create a new app. Set `useNewApplication: true`. `newApplicationName` may be null; the API derives it from the file. Scope -- set exactly ONE on `policyLevel`: * This Computer (default): all three flags false (`toEntireOrganization`/`toComputerGroup`/`toComputer`); scope is inferred from top-level `computerId`. * Computer group: `toComputerGroup: true`, populate `selectedComputerGroup: {computerGroupId, name, organizationId, osType, isGlobal}`, and set top-level `computerGroupId`. * Entire organization: `toEntireOrganization: true`; leave `selectedComputerGroup` as null-filled stub. Action -- for elevate requests set `isElevationRequest: true` and `isExecutionRequest: false`; for execute reverse them. Both are spec-readOnly but MUST be sent matching the actual action type. Always send full null-filled stub sub-objects (`matchingApplication`, `existingApplication`, `selectedComputerGroup`) rather than omitting them. Wrong shape returns opaque HTTP 500 with no field-level hint."""
+        body_json = body.model_dump(by_alias=True, exclude_none=False)
         extra_headers = {}
         if override_organization_id is not None:
             extra_headers["OverrideManagedOrganizationId"] = override_organization_id
