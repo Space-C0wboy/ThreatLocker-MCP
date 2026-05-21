@@ -1,9 +1,9 @@
 """Configuration loaded from environment variables."""
+
 from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Optional
 
 from dotenv import load_dotenv
 
@@ -25,7 +25,7 @@ class Config:
     http_port: int
 
     @classmethod
-    def from_env(cls) -> "Config":
+    def from_env(cls) -> Config:
         api_key = os.getenv("THREATLOCKER_API_KEY", "").strip()
         if not api_key:
             raise ConfigError(
@@ -34,13 +34,13 @@ class Config:
 
         default_org_id = os.getenv("THREATLOCKER_ORG_ID", "").strip()
         if not default_org_id:
-            raise ConfigError(
-                "THREATLOCKER_ORG_ID is required (your default organization GUID)."
-            )
+            raise ConfigError("THREATLOCKER_ORG_ID is required (your default organization GUID).")
 
-        base_url = os.getenv(
-            "THREATLOCKER_BASE_URL", "https://portalapi.g.threatlocker.com"
-        ).strip().rstrip("/")
+        base_url = (
+            os.getenv("THREATLOCKER_BASE_URL", "https://portalapi.g.threatlocker.com")
+            .strip()
+            .rstrip("/")
+        )
         if not base_url.startswith(("http://", "https://")):
             raise ConfigError(
                 f"THREATLOCKER_BASE_URL must start with http:// or https:// (got {base_url!r})"
@@ -70,7 +70,7 @@ class Config:
         )
 
 
-_config: Optional[Config] = None
+_config: Config | None = None
 
 
 def get_config() -> Config:

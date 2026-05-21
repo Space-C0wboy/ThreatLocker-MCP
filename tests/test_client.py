@@ -1,4 +1,5 @@
 """Tests for the ThreatLocker HTTP client (mocked, no live API calls)."""
+
 from __future__ import annotations
 
 import os
@@ -24,6 +25,11 @@ def config() -> Config:
         http_host="127.0.0.1",
         http_port=8765,
     )
+
+
+# ---------------------------------------------------------------------------
+# Basic request behaviour
+# ---------------------------------------------------------------------------
 
 
 async def test_get_sends_auth_and_default_org(httpx_mock, config):
@@ -66,6 +72,75 @@ async def test_error_is_raised(httpx_mock, config):
     assert "forbidden" in str(exc_info.value)
 
 
+async def test_empty_body_returns_none(httpx_mock, config):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.example.test/portalApi/Foo",
+        status_code=204,
+        content=b"",
+    )
+    async with ThreatLockerClient(config) as c:
+        result = await c.post("/portalApi/Foo")
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Retry logic
+# ---------------------------------------------------------------------------
+
+
+async def test_retries_on_503_then_succeeds(httpx_mock, config):
+    """A 503 on the first attempt should be retried; success on second."""
+    httpx_mock.add_response(
+        method="GET",
+        url="https://api.example.test/portalApi/Computer",
+        status_code=503,
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://api.example.test/portalApi/Computer",
+        json=[{"id": "ok"}],
+    )
+    async with ThreatLockerClient(config) as c:
+        result = await c.get("/portalApi/Computer")
+    assert result == [{"id": "ok"}]
+
+
+async def test_raises_after_all_retries_exhausted(httpx_mock, config):
+    """Three consecutive 503s should eventually raise ThreatLockerAPIError."""
+    for _ in range(3):
+        httpx_mock.add_response(
+            method="GET",
+            url="https://api.example.test/portalApi/Computer",
+            status_code=503,
+        )
+    async with ThreatLockerClient(config) as c:
+        with pytest.raises(ThreatLockerAPIError) as exc_info:
+            await c.get("/portalApi/Computer")
+    assert exc_info.value.status_code == 503
+
+
+async def test_4xx_is_not_retried(httpx_mock, config):
+    """A 404 should raise immediately without retrying."""
+    httpx_mock.add_response(
+        method="GET",
+        url="https://api.example.test/portalApi/Computer",
+        status_code=404,
+        json={"message": "not found"},
+    )
+    async with ThreatLockerClient(config) as c:
+        with pytest.raises(ThreatLockerAPIError) as exc_info:
+            await c.get("/portalApi/Computer")
+    assert exc_info.value.status_code == 404
+    # Only one request should have been made
+    assert len(httpx_mock.get_requests()) == 1
+
+
+# ---------------------------------------------------------------------------
+# Generated tool — camelCase serialisation
+# ---------------------------------------------------------------------------
+
+
 async def test_generated_tool_serializes_body_with_aliases(httpx_mock, monkeypatch, config):
     """End-to-end: a generated tool packs a Pydantic model into camelCase JSON."""
     from threatlocker_mcp import client as client_module
@@ -82,23 +157,124 @@ async def test_generated_tool_serializes_body_with_aliases(httpx_mock, monkeypat
         json=[{"computerId": "abc"}],
     )
 
-    # Call the generated tool function directly
-    from threatlocker_mcp.tools.computer import register
     from fastmcp import FastMCP
+
+    from threatlocker_mcp.tools.computer import register
 
     mcp = FastMCP("test")
     register(mcp)
     tool = await mcp.get_tool("computer_get_by_all_parameters")
-    result = await tool.run(
-        {"body": models.ComputerParameterDto(search_text="srv-01", page_size=50)}
-    )
+    await tool.run({"body": models.ComputerParameterDto(search_text="srv-01", page_size=50)})
 
-    # Verify the request went out with camelCase keys
     request = httpx_mock.get_request()
     import json as _json
+
     sent = _json.loads(request.content)
     assert sent == {"searchText": "srv-01", "pageSize": 50}
     assert request.headers["Authorization"] == "test-key"
     assert request.headers["ManagedOrganizationId"] == "default-org"
 
     await test_client.close()
+
+
+async def test_approval_request_tool_camel_case(httpx_mock, monkeypatch, config):
+    """approval_request_get_by_parameters serialises ApprovalRequestParametersDto correctly."""
+    from threatlocker_mcp import client as client_module
+    from threatlocker_mcp import models
+
+    test_client = ThreatLockerClient(config)
+    await test_client.connect()
+    monkeypatch.setattr(client_module, "_client", test_client)
+
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.example.test/portalapi/ApprovalRequest/ApprovalRequestGetByParameters",
+        json=[],
+    )
+
+    from fastmcp import FastMCP
+
+    from threatlocker_mcp.tools.approval_request import register
+
+    mcp = FastMCP("test")
+    register(mcp)
+    tool = await mcp.get_tool("approval_request_get_by_parameters")
+    await tool.run(
+        {
+            "body": models.ApprovalRequestParametersDto(
+                status_id=1, page_size=25, show_child_organizations=True
+            )
+        }
+    )
+
+    import json as _json
+
+    sent = _json.loads(httpx_mock.get_request().content)
+    assert sent == {"statusId": 1, "pageSize": 25, "showChildOrganizations": True}
+
+    await test_client.close()
+
+
+# ---------------------------------------------------------------------------
+# Config validation
+# ---------------------------------------------------------------------------
+
+
+def test_config_rejects_missing_api_key(monkeypatch):
+    monkeypatch.delenv("THREATLOCKER_API_KEY", raising=False)
+    monkeypatch.setenv("THREATLOCKER_API_KEY", "")
+    from threatlocker_mcp.config import Config, ConfigError
+
+    with pytest.raises(ConfigError, match="THREATLOCKER_API_KEY"):
+        Config.from_env()
+
+
+def test_config_rejects_missing_org_id(monkeypatch):
+    monkeypatch.setenv("THREATLOCKER_API_KEY", "some-key")
+    monkeypatch.setenv("THREATLOCKER_ORG_ID", "")
+    from threatlocker_mcp.config import Config, ConfigError
+
+    with pytest.raises(ConfigError, match="THREATLOCKER_ORG_ID"):
+        Config.from_env()
+
+
+def test_config_rejects_invalid_base_url(monkeypatch):
+    monkeypatch.setenv("THREATLOCKER_API_KEY", "some-key")
+    monkeypatch.setenv("THREATLOCKER_ORG_ID", "some-org")
+    monkeypatch.setenv("THREATLOCKER_BASE_URL", "ftp://bad.example.com")
+    from threatlocker_mcp.config import Config, ConfigError
+
+    with pytest.raises(ConfigError, match="THREATLOCKER_BASE_URL"):
+        Config.from_env()
+
+
+def test_config_rejects_non_numeric_timeout(monkeypatch):
+    monkeypatch.setenv("THREATLOCKER_API_KEY", "some-key")
+    monkeypatch.setenv("THREATLOCKER_ORG_ID", "some-org")
+    monkeypatch.setenv("THREATLOCKER_BASE_URL", "https://api.example.test")
+    monkeypatch.setenv("THREATLOCKER_TIMEOUT", "not-a-number")
+    from threatlocker_mcp.config import Config, ConfigError
+
+    with pytest.raises(ConfigError, match="THREATLOCKER_TIMEOUT"):
+        Config.from_env()
+
+
+def test_config_rejects_non_integer_port(monkeypatch):
+    monkeypatch.setenv("THREATLOCKER_API_KEY", "some-key")
+    monkeypatch.setenv("THREATLOCKER_ORG_ID", "some-org")
+    monkeypatch.setenv("THREATLOCKER_BASE_URL", "https://api.example.test")
+    monkeypatch.setenv("MCP_HTTP_PORT", "abc")
+    from threatlocker_mcp.config import Config, ConfigError
+
+    with pytest.raises(ConfigError, match="MCP_HTTP_PORT"):
+        Config.from_env()
+
+
+def test_config_strips_trailing_slash_from_base_url(monkeypatch):
+    monkeypatch.setenv("THREATLOCKER_API_KEY", "some-key")
+    monkeypatch.setenv("THREATLOCKER_ORG_ID", "some-org")
+    monkeypatch.setenv("THREATLOCKER_BASE_URL", "https://api.example.test/")
+    from threatlocker_mcp.config import Config
+
+    config = Config.from_env()
+    assert not config.base_url.endswith("/")
