@@ -35,12 +35,17 @@ from typing import Any
 # actually requires.
 DESCRIPTION_OVERRIDES: dict[tuple[str, str], str] = {
     ("/portalapi/ActionLog/ActionLogGetByParametersV2", "post"): (
-        " NOTE: body must include `sourceTableId` (1=ActionLog, 2=DenyActionLog,"
-        " 3=BaselineActionLog, 4=EventLogActionLog) AND the date range supplied in"
-        " BOTH `dateTime` (array of two ISO 8601 strings) AND `startDate`/`endDate`."
-        " Omitting `sourceTableId` returns HTTP 500; supplying only one date form"
-        " returns 417 'Invalid Date Range' or HTTP 500. Do NOT set the `usenewsearch`"
-        " header to true -- it currently triggers HTTP 500."
+        " NOTE: this endpoint runs in two modes depending on the `usenewsearch`"
+        " header. The MCP defaults to `usenewsearch=true` (the new search path the"
+        " portal SPA uses), which is the only mode that returns data. Required:"
+        " `sourceTableId` (1=ActionLog, 2=DenyActionLog, 3=BaselineActionLog,"
+        " 4=EventLogActionLog), `startDate`, `endDate`, and `paramsFieldsDto`"
+        " (the MCP defaults this to []; the server returns HTTP 500 when the field"
+        " is absent under the new search path). Omitting `sourceTableId` returns"
+        " HTTP 500; omitting both date forms returns 417 'Invalid Date Range'."
+        " Pass `usenewsearch=null` to opt out into the legacy path -- but note"
+        " the legacy path returns an empty body even when data exists, so this is"
+        " only useful for back-compat probing."
     ),
     ("/portalapi/ApprovalRequest/ApprovalRequestGetByParameters", "post"): (
         " NOTE: `statusId` is required (e.g. 1 for Pending). Calls without it return"
@@ -128,6 +133,43 @@ DESCRIPTION_OVERRIDES: dict[tuple[str, str], str] = {
 # alternatives (e.g. hostname OR computerId), document it in DESCRIPTION_OVERRIDES
 # instead, since a single-param promotion can't express one-of semantics.
 REQUIRED_PARAM_OVERRIDES: dict[tuple[str, str], set[str]] = {}
+
+
+# Default values to inject for header parameters when the caller doesn't pass one.
+# Keys are (path, method); values map swagger header-parameter name to the literal
+# string default. Use this when the portal SPA always sends a particular header
+# value at runtime that's required for the endpoint to behave correctly, but the
+# spec doesn't mark it required and doesn't surface the value. Callers can still
+# override by passing the parameter explicitly (including `None` to opt out).
+HEADER_PARAM_DEFAULTS: dict[tuple[str, str], dict[str, str]] = {
+    # The new-search path is the only mode that returns data; the legacy path
+    # silently returns an empty body. Verified 2026-05-21 against the portal
+    # capture for the dev tenant's Unified Audit page.
+    ("/portalapi/ActionLog/ActionLogGetByParametersV2", "post"): {
+        "usenewsearch": "true",
+    },
+}
+
+
+# Per-property field overrides for generated Pydantic models. Use when the spec
+# default doesn't match what the server actually requires -- for example, when a
+# field that's marked nullable in the spec is in practice required by the server
+# under some request modes. The override replaces the Field(default=..., ...) line
+# emitted by the default codegen, so include both `type` and `default` together.
+# `type` is the bare Python type (no `| None` — the override implies non-nullable).
+# `default` is the full Field-argument string (e.g. "default_factory=list").
+PROPERTY_FIELD_OVERRIDES: dict[str, dict[str, dict[str, str]]] = {
+    "ActionLogParamsDto": {
+        # The new-search code path (usenewsearch=true) returns HTTP 500 when this
+        # field is absent — even though the spec marks it nullable. Default to []
+        # so the wire body always carries the field. Verified 2026-05-21 by
+        # bisecting against the portal-captured working body.
+        "paramsFieldsDto": {
+            "type": "list[ParamsFieldsDto]",
+            "default": "default_factory=list",
+        },
+    },
+}
 
 # Per-schema property name overrides. Some spec property names are mis-cased relative
 # to what the live API actually returns and accepts -- e.g. ThreatLockerActionDto
@@ -402,11 +444,26 @@ def emit_model(name: str, schema: dict, models_in_scope: set[str]) -> str:
     lines.append("    model_config = ConfigDict(populate_by_name=True, extra='allow')")
 
     overrides = PROPERTY_NAME_OVERRIDES.get(name, {})
+    field_overrides = PROPERTY_FIELD_OVERRIDES.get(name, {})
     for prop_name, prop_schema in props.items():
         # If the spec name is mis-cased relative to the live API, use the canonical
         # name for both the Pydantic alias and the snake_case derivation. The original
         # `prop_name` is still what appears in the spec's `required` array.
         canonical = overrides.get(prop_name, prop_name)
+
+        # Per-property field override — when set, we emit a tailored field line
+        # that bypasses the spec-derived type/default logic. Used for fields where
+        # the spec default doesn't match what the server actually requires.
+        field_override = field_overrides.get(prop_name)
+        if field_override:
+            py_field = snake(canonical)
+            override_type = field_override["type"]
+            override_default = field_override["default"]
+            alias_arg = f'alias="{canonical}"' if py_field != canonical else ""
+            field_args = ", ".join(a for a in [override_default, alias_arg] if a)
+            lines.append(f"    {py_field}: {override_type} = Field({field_args})")
+            continue
+
         py_type = py_type_for_schema(prop_schema, models_in_scope)
         py_field = snake(canonical)
         is_required = prop_name in required
@@ -592,13 +649,22 @@ def generate_tools_module(
                 )
             params_dict_items.append((py_name, name))
 
-        # Custom (non-auth) header params, if any
+        # Custom (non-auth) header params, if any. Per-endpoint defaults from
+        # HEADER_PARAM_DEFAULTS get applied so the caller doesn't have to know
+        # about portal-SPA-only headers.
+        endpoint_header_defaults = HEADER_PARAM_DEFAULTS.get((path, method), {})
         for p in header_params:
             name = p["name"]
             py_name = snake(name)
-            optional_args.append(
-                f'        {py_name}: Annotated[str | None, Field(description="Header: {name}", default=None)] = None'
-            )
+            header_default = endpoint_header_defaults.get(name)
+            if header_default is not None:
+                optional_args.append(
+                    f'        {py_name}: Annotated[str | None, Field(description="Header: {name}", default={header_default!r})] = {header_default!r}'
+                )
+            else:
+                optional_args.append(
+                    f'        {py_name}: Annotated[str | None, Field(description="Header: {name}", default=None)] = None'
+                )
 
         # Request body
         body_schema_ref = None

@@ -222,6 +222,99 @@ async def test_generated_tool_serializes_body_with_aliases(httpx_mock, monkeypat
     await test_client.close()
 
 
+async def test_action_log_v2_defaults_usenewsearch_and_params_fields(
+    httpx_mock, monkeypatch, config
+):
+    """action_log_get_by_parameters_v2 must default the `usenewsearch=true` header
+    and ship `paramsFieldsDto: []` in the body.
+
+    Both pieces are load-bearing: without `usenewsearch=true` the server silently
+    returns an empty body even when data exists, and with `usenewsearch=true` but
+    the field absent the server returns HTTP 500. Verified end-to-end against the
+    live dev tenant on 2026-05-21 (see fix/action-log-empty-response).
+    """
+    from threatlocker_mcp import client as client_module
+    from threatlocker_mcp import models
+
+    test_client = ThreatLockerClient(config)
+    await test_client.connect()
+    monkeypatch.setattr(client_module, "_client", test_client)
+
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.example.test/portalapi/ActionLog/ActionLogGetByParametersV2",
+        json=[],
+    )
+
+    from fastmcp import FastMCP
+
+    from threatlocker_mcp.tools.action_log import register
+
+    mcp = FastMCP("test")
+    register(mcp)
+    tool = await mcp.get_tool("action_log_get_by_parameters_v2")
+    await tool.run(
+        {
+            "body": models.ActionLogParamsDto(
+                source_table_id=1,
+                start_date="2026-05-21T00:00:00Z",
+                end_date="2026-05-22T00:00:00Z",
+            )
+        }
+    )
+
+    request = httpx_mock.get_request()
+    import json as _json
+
+    sent = _json.loads(request.content)
+    # paramsFieldsDto must always appear, defaulted to [] — the server returns
+    # HTTP 500 when it's missing under the new search path.
+    assert "paramsFieldsDto" in sent, "paramsFieldsDto must be sent (default [])"
+    assert sent["paramsFieldsDto"] == []
+    # usenewsearch header must default to "true" so the call hits the path that
+    # actually returns data.
+    assert request.headers.get("usenewsearch") == "true"
+
+    await test_client.close()
+
+
+async def test_action_log_v2_back_compat_legacy_path(httpx_mock, monkeypatch, config):
+    """Callers can opt out of the new-search path by passing usenewsearch=None
+    explicitly. The MCP client suppresses the header when the value is None.
+    """
+    from threatlocker_mcp import client as client_module
+    from threatlocker_mcp import models
+
+    test_client = ThreatLockerClient(config)
+    await test_client.connect()
+    monkeypatch.setattr(client_module, "_client", test_client)
+
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.example.test/portalapi/ActionLog/ActionLogGetByParametersV2",
+        json=[],
+    )
+
+    from fastmcp import FastMCP
+
+    from threatlocker_mcp.tools.action_log import register
+
+    mcp = FastMCP("test")
+    register(mcp)
+    tool = await mcp.get_tool("action_log_get_by_parameters_v2")
+    await tool.run(
+        {
+            "body": models.ActionLogParamsDto(source_table_id=1),
+            "usenewsearch": None,
+        }
+    )
+
+    request = httpx_mock.get_request()
+    assert "usenewsearch" not in {k.lower() for k in request.headers.keys()}
+
+    await test_client.close()
+
+
 async def test_approval_request_tool_camel_case(httpx_mock, monkeypatch, config):
     """approval_request_get_by_parameters serialises ApprovalRequestParametersDto correctly."""
     from threatlocker_mcp import client as client_module

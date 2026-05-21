@@ -17,13 +17,13 @@ from ..client import get_client
 def register(mcp: FastMCP) -> None:
     @mcp.tool(
         name="action_log_get_by_parameters_v2",
-        description="Get Action Logs By Parameters. NOTE: body must include `sourceTableId` (1=ActionLog, 2=DenyActionLog, 3=BaselineActionLog, 4=EventLogActionLog) AND the date range supplied in BOTH `dateTime` (array of two ISO 8601 strings) AND `startDate`/`endDate`. Omitting `sourceTableId` returns HTTP 500; supplying only one date form returns 417 'Invalid Date Range' or HTTP 500. Do NOT set the `usenewsearch` header to true -- it currently triggers HTTP 500.",
+        description="Get Action Logs By Parameters. NOTE: this endpoint runs in two modes depending on the `usenewsearch` header. The MCP defaults to `usenewsearch=true` (the new search path the portal SPA uses), which is the only mode that returns data. Required: `sourceTableId` (1=ActionLog, 2=DenyActionLog, 3=BaselineActionLog, 4=EventLogActionLog), `startDate`, `endDate`, and `paramsFieldsDto` (the MCP defaults this to []; the server returns HTTP 500 when the field is absent under the new search path). Omitting `sourceTableId` returns HTTP 500; omitting both date forms returns 417 'Invalid Date Range'. Pass `usenewsearch=null` to opt out into the legacy path -- but note the legacy path returns an empty body even when data exists, so this is only useful for back-compat probing.",
     )
     async def action_log_get_by_parameters_v2(
         body: Annotated[models.ActionLogParamsDto, Field(description="Request body.")],
         usenewsearch: Annotated[
-            str | None, Field(description="Header: usenewsearch", default=None)
-        ] = None,
+            str | None, Field(description="Header: usenewsearch", default="true")
+        ] = "true",
         organization_id: Annotated[
             str | None,
             Field(
@@ -36,7 +36,7 @@ def register(mcp: FastMCP) -> None:
             Field(description="Optional OverrideManagedOrganizationId header.", default=None),
         ] = None,
     ) -> Any:
-        """Get Action Logs By Parameters. NOTE: body must include `sourceTableId` (1=ActionLog, 2=DenyActionLog, 3=BaselineActionLog, 4=EventLogActionLog) AND the date range supplied in BOTH `dateTime` (array of two ISO 8601 strings) AND `startDate`/`endDate`. Omitting `sourceTableId` returns HTTP 500; supplying only one date form returns 417 'Invalid Date Range' or HTTP 500. Do NOT set the `usenewsearch` header to true -- it currently triggers HTTP 500."""
+        """Get Action Logs By Parameters. NOTE: this endpoint runs in two modes depending on the `usenewsearch` header. The MCP defaults to `usenewsearch=true` (the new search path the portal SPA uses), which is the only mode that returns data. Required: `sourceTableId` (1=ActionLog, 2=DenyActionLog, 3=BaselineActionLog, 4=EventLogActionLog), `startDate`, `endDate`, and `paramsFieldsDto` (the MCP defaults this to []; the server returns HTTP 500 when the field is absent under the new search path). Omitting `sourceTableId` returns HTTP 500; omitting both date forms returns 417 'Invalid Date Range'. Pass `usenewsearch=null` to opt out into the legacy path -- but note the legacy path returns an empty body even when data exists, so this is only useful for back-compat probing."""
         body_json = body.model_dump(by_alias=True, exclude_none=True)
         extra_headers = {}
         if override_organization_id is not None:
