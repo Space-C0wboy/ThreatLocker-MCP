@@ -15,7 +15,10 @@ from ..client import get_client
 
 
 def register(mcp: FastMCP) -> None:
-    @mcp.tool(name="action_log_get_by_parameters_v2", description="Get Action Logs By Parameters.")
+    @mcp.tool(
+        name="action_log_get_by_parameters_v2",
+        description="Get Action Logs By Parameters. NOTE: the API requires the date range supplied in BOTH `dateTime` (array of two ISO 8601 strings) AND `startDate`/`endDate` -- passing only one returns 417 'Invalid Date Range' or HTTP 500.",
+    )
     async def action_log_get_by_parameters_v2(
         body: Annotated[models.ActionLogParamsDto, Field(description="Request body.")],
         usenewsearch: Annotated[
@@ -33,7 +36,7 @@ def register(mcp: FastMCP) -> None:
             Field(description="Optional OverrideManagedOrganizationId header.", default=None),
         ] = None,
     ) -> Any:
-        """Get Action Logs By Parameters."""
+        """Get Action Logs By Parameters. NOTE: the API requires the date range supplied in BOTH `dateTime` (array of two ISO 8601 strings) AND `startDate`/`endDate` -- passing only one returns 417 'Invalid Date Range' or HTTP 500."""
         body_json = body.model_dump(by_alias=True, exclude_none=True)
         extra_headers = {}
         if override_organization_id is not None:

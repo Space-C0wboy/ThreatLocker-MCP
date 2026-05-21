@@ -58,6 +58,24 @@ async def test_org_override(httpx_mock, config):
         await c.get("/portalApi/Computer", organization_id="child-org-1")
 
 
+async def test_empty_body_returns_sentinel(httpx_mock, config):
+    """200 OK with no body should surface a clear marker, not silent None.
+
+    Some ThreatLocker endpoints (action log / approval-request searches) reply with
+    HTTP 200 + empty body when there are no rows. We want callers to see *something*
+    instead of MCP's bare "no output" message.
+    """
+    httpx_mock.add_response(
+        method="GET",
+        url="https://api.example.test/portalApi/Computer",
+        content=b"",
+        status_code=200,
+    )
+    async with ThreatLockerClient(config) as c:
+        result = await c.get("/portalApi/Computer")
+    assert result == {"_empty_response": True, "_status_code": 200}
+
+
 async def test_error_is_raised(httpx_mock, config):
     httpx_mock.add_response(
         method="GET",
@@ -72,7 +90,8 @@ async def test_error_is_raised(httpx_mock, config):
     assert "forbidden" in str(exc_info.value)
 
 
-async def test_empty_body_returns_none(httpx_mock, config):
+async def test_empty_body_204_returns_sentinel(httpx_mock, config):
+    """204 No Content should also surface the sentinel so MCP doesn't drop it silently."""
     httpx_mock.add_response(
         method="POST",
         url="https://api.example.test/portalApi/Foo",
@@ -81,7 +100,7 @@ async def test_empty_body_returns_none(httpx_mock, config):
     )
     async with ThreatLockerClient(config) as c:
         result = await c.post("/portalApi/Foo")
-    assert result is None
+    assert result == {"_empty_response": True, "_status_code": 204}
 
 
 # ---------------------------------------------------------------------------

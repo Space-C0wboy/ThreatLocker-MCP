@@ -16,7 +16,8 @@ from ..client import get_client
 
 def register(mcp: FastMCP) -> None:
     @mcp.tool(
-        name="approval_request_get_by_parameters", description="Approval Request: Get By Parameters"
+        name="approval_request_get_by_parameters",
+        description="Approval Request: Get By Parameters NOTE: `statusId` is required (e.g. 1 for Pending). Calls without it return HTTP 500.",
     )
     async def approval_request_get_by_parameters(
         body: Annotated[models.ApprovalRequestParametersDto, Field(description="Request body.")],
@@ -32,7 +33,7 @@ def register(mcp: FastMCP) -> None:
             Field(description="Optional OverrideManagedOrganizationId header.", default=None),
         ] = None,
     ) -> Any:
-        """Approval Request: Get By Parameters"""
+        """Approval Request: Get By Parameters NOTE: `statusId` is required (e.g. 1 for Pending). Calls without it return HTTP 500."""
         body_json = body.model_dump(by_alias=True, exclude_none=True)
         extra_headers = {}
         if override_organization_id is not None:

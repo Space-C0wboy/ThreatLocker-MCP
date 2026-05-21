@@ -286,6 +286,14 @@ The following are gaps in ThreatLocker's public API, not limitations of this ser
 
 ---
 
+## Known API quirks
+
+These are server-side oddities worth knowing when an LLM is driving the tools:
+
+- **`action_log_get_by_parameters_v2` needs *both* date-range encodings.** The OpenAPI schema lists `dateTime` (an array of two ISO 8601 strings) *and* `startDate`/`endDate` as separate fields. In practice the API rejects requests that supply only one — supply the same window in **both** forms. Example: `{"sourceTableId": 1, "dateTime": ["2026-05-19T00:00:00Z","2026-05-20T23:59:59Z"], "startDate": "2026-05-19T00:00:00Z", "endDate": "2026-05-20T23:59:59Z", "pageSize": 25, "pageNumber": 1}`.
+- **`approval_request_get_by_parameters` needs `statusId`.** Without it the server returns HTTP 500. Use `statusId=1` for pending requests.
+- **Empty responses surface as `{"_empty_response": true, "_status_code": 200}`.** Several ThreatLocker endpoints reply with HTTP 200 + an empty body when there are no matching rows — the client converts that to this sentinel object so it isn't silently dropped.
+
 ## Troubleshooting
 
 **Where are the logs?**
