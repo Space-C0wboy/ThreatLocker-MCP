@@ -337,17 +337,17 @@ class ApplicationOnlineDto(BaseModel):
 
 class ThreatLockerActionDto(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="allow")
-    fullpath: str | None = Field(default=None)
-    policyid: str | None = Field(default=None)
+    full_path: str | None = Field(default=None, alias="fullPath")
+    policy_id: str | None = Field(default=None, alias="policyId")
     username: str | None = Field(default=None)
-    actionid: int = Field(default=0)
+    action_id: int = Field(default=0, alias="actionId")
     hash: str | None = Field(default=None)
     process_name: str | None = Field(default=None, alias="processName")
     certs: list[ThreatLockerCertDto] | None = Field(default=None)
     application_id: str | None = Field(default=None, alias="applicationId")
     datetime: str | None = Field(default=None)
     log_action: bool = Field(default=False, alias="logAction")
-    serial_number: str | None = Field(default=None, alias="SerialNumber")
+    serial_number: str | None = Field(default=None, alias="serialNumber")
     device_type: str | None = Field(default=None, alias="deviceType")
     action_type: str | None = Field(default=None, alias="actionType")
     size: int = Field(default=0)
@@ -368,7 +368,7 @@ class ThreatLockerActionDto(BaseModel):
     manufacturer: str | None = Field(default=None)
     os_type: int = Field(default=0, alias="osType")
     destination_i_p: str | None = Field(default=None, alias="destinationIP")
-    domain_name: str | None = Field(default=None, alias="DomainName")
+    domain_name: str | None = Field(default=None, alias="domainName")
     organization_name: str | None = Field(default=None, alias="organizationName")
 
 
