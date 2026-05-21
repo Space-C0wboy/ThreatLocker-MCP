@@ -14,13 +14,13 @@ from .. import models
 
 
 def register(mcp: FastMCP) -> None:
-    @mcp.tool(name="approval_request_get_by_parameters", description='POST /portalapi/ApprovalRequest/ApprovalRequestGetByParameters')
+    @mcp.tool(name="approval_request_get_by_parameters", description='POST /portalapi/ApprovalRequest/ApprovalRequestGetByParameters NOTE: `statusId` is required (e.g. 1 for Pending). Calls without it return HTTP 500.')
     async def approval_request_get_by_parameters(
         body: Annotated[models.ApprovalRequestParametersDto, Field(description="Request body.")],
         organization_id: Annotated[Optional[str], Field(description="Override the default organization (ManagedOrganizationId header).", default=None)] = None,
         override_organization_id: Annotated[Optional[str], Field(description="Optional OverrideManagedOrganizationId header.", default=None)] = None,
     ) -> Any:
-        """POST /portalapi/ApprovalRequest/ApprovalRequestGetByParameters"""
+        """POST /portalapi/ApprovalRequest/ApprovalRequestGetByParameters NOTE: `statusId` is required (e.g. 1 for Pending). Calls without it return HTTP 500."""
         body_json = body.model_dump(by_alias=True, exclude_none=True)
         extra_headers = {}
         if override_organization_id is not None:

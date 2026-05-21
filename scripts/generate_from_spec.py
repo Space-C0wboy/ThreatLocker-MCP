@@ -28,6 +28,23 @@ from typing import Any
 # Curated tool surface — (path, method) tuples we want exposed as MCP tools.
 # Keep grouped by tag for readability.
 # ---------------------------------------------------------------------------
+# Per-endpoint description overrides. Appended to the swagger summary at codegen
+# time. Use these to teach LLM callers about ThreatLocker API quirks that aren't
+# visible in the spec — e.g. fields the schema marks optional but the server
+# actually requires.
+DESCRIPTION_OVERRIDES: dict[tuple[str, str], str] = {
+    ("/portalapi/ActionLog/ActionLogGetByParametersV2", "post"): (
+        " NOTE: the API requires the date range supplied in BOTH `dateTime` (array of"
+        " two ISO 8601 strings) AND `startDate`/`endDate` -- passing only one returns"
+        " 417 'Invalid Date Range' or HTTP 500."
+    ),
+    ("/portalapi/ApprovalRequest/ApprovalRequestGetByParameters", "post"): (
+        " NOTE: `statusId` is required (e.g. 1 for Pending). Calls without it return"
+        " HTTP 500."
+    ),
+}
+
+
 CHOSEN_ENDPOINTS: list[tuple[str, str]] = [
     # Computer (8)
     ("/portalapi/Computer/ComputerGetByAllParameters", "post"),
@@ -333,6 +350,10 @@ def generate_tools_module(
         first_line = summary.split("\n")[0].strip() if summary else f"{method.upper()} {path}"
         # Full description (cleaned up for the docstring)
         full_desc = summary.replace("\r\n", "\n").strip() or first_line
+        override = DESCRIPTION_OVERRIDES.get((path, method))
+        if override:
+            first_line = (first_line + override).strip()
+            full_desc = (full_desc + override).strip()
 
         # Build argument list as (text, has_default) so we can sort.
         required_args: list[str] = []
@@ -516,7 +537,7 @@ def main() -> int:
     # Write models
     pkg_dir = Path(__file__).resolve().parent.parent / "src" / "threatlocker_mcp"
     models_path = pkg_dir / "models.py"
-    models_path.write_text(generate_models(spec, needed))
+    models_path.write_text(generate_models(spec, needed), encoding="utf-8")
     print(f"Wrote {models_path}", file=sys.stderr)
 
     # Write tools per tag
@@ -533,7 +554,7 @@ def main() -> int:
         module_name = snake(tag)
         tag_modules.append((tag, module_name))
         out = generate_tools_module(tag, ops, needed)
-        (tools_dir / f"{module_name}.py").write_text(out)
+        (tools_dir / f"{module_name}.py").write_text(out, encoding="utf-8")
         print(f"Wrote tools/{module_name}.py ({len(ops)} tools)", file=sys.stderr)
 
     # Write tools/__init__.py
@@ -550,7 +571,7 @@ def main() -> int:
     for _tag, mod in tag_modules:
         init_lines.append(f"    {mod}.register(mcp)")
     init_lines.append("")
-    (tools_dir / "__init__.py").write_text("\n".join(init_lines))
+    (tools_dir / "__init__.py").write_text("\n".join(init_lines), encoding="utf-8")
     print(f"Wrote tools/__init__.py", file=sys.stderr)
 
     return 0

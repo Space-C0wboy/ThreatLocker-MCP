@@ -113,7 +113,13 @@ class ThreatLockerClient:
             raise ThreatLockerAPIError(response.status_code, message, body)
 
         if not response.content:
-            return None
+            # Some ThreatLocker endpoints (e.g. ActionLog/ApprovalRequest searches with no
+            # matching rows) return HTTP 200 with an empty body. Surface that explicitly
+            # so callers can distinguish "no results" from a missing tool response.
+            logger.info(
+                "empty response body from %s %s (HTTP %d)", method, path, response.status_code
+            )
+            return {"_empty_response": True, "_status_code": response.status_code}
 
         ctype = response.headers.get("content-type", "")
         if "application/json" in ctype:
