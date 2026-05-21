@@ -197,7 +197,7 @@ class ActionLogParamsDto(BaseModel):
     group_by: str | None = Field(default=None, alias="groupBy")
     page_number: int = Field(default=1, alias="pageNumber")
     page_size: int = Field(default=25, alias="pageSize")
-    params_fields_dto: list[ParamsFieldsDto] | None = Field(default=None, alias="paramsFieldsDto")
+    params_fields_dto: list[ParamsFieldsDto] = Field(default_factory=list, alias="paramsFieldsDto")
     start_date: str | None = Field(default=None, alias="startDate")
     end_date: str | None = Field(default=None, alias="endDate")
     date_time_last_imported: str | None = Field(default=None, alias="dateTimeLastImported")
