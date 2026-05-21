@@ -17,7 +17,7 @@ from ..client import get_client
 def register(mcp: FastMCP) -> None:
     @mcp.tool(
         name="action_log_get_by_parameters_v2",
-        description="Get Action Logs By Parameters. NOTE: the API requires the date range supplied in BOTH `dateTime` (array of two ISO 8601 strings) AND `startDate`/`endDate` -- passing only one returns 417 'Invalid Date Range' or HTTP 500.",
+        description="Get Action Logs By Parameters. NOTE: body must include `sourceTableId` (1=ActionLog, 2=DenyActionLog, 3=BaselineActionLog, 4=EventLogActionLog) AND the date range supplied in BOTH `dateTime` (array of two ISO 8601 strings) AND `startDate`/`endDate`. Omitting `sourceTableId` returns HTTP 500; supplying only one date form returns 417 'Invalid Date Range' or HTTP 500. Do NOT set the `usenewsearch` header to true -- it currently triggers HTTP 500.",
     )
     async def action_log_get_by_parameters_v2(
         body: Annotated[models.ActionLogParamsDto, Field(description="Request body.")],
@@ -36,7 +36,7 @@ def register(mcp: FastMCP) -> None:
             Field(description="Optional OverrideManagedOrganizationId header.", default=None),
         ] = None,
     ) -> Any:
-        """Get Action Logs By Parameters. NOTE: the API requires the date range supplied in BOTH `dateTime` (array of two ISO 8601 strings) AND `startDate`/`endDate` -- passing only one returns 417 'Invalid Date Range' or HTTP 500."""
+        """Get Action Logs By Parameters. NOTE: body must include `sourceTableId` (1=ActionLog, 2=DenyActionLog, 3=BaselineActionLog, 4=EventLogActionLog) AND the date range supplied in BOTH `dateTime` (array of two ISO 8601 strings) AND `startDate`/`endDate`. Omitting `sourceTableId` returns HTTP 500; supplying only one date form returns 417 'Invalid Date Range' or HTTP 500. Do NOT set the `usenewsearch` header to true -- it currently triggers HTTP 500."""
         body_json = body.model_dump(by_alias=True, exclude_none=True)
         extra_headers = {}
         if override_organization_id is not None:
@@ -94,7 +94,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool(
         name="action_log_get_all_for_file_history_v2",
-        description="Get All File History by hostname and fullpath",
+        description="Get All File History by hostname and fullpath NOTE: spec marks every parameter optional, but the API returns 417 'Missing Parameters. Unable to load details.' unless `fullPath` plus one of (`hostname`, `computerId`) is supplied.",
     )
     async def action_log_get_all_for_file_history_v2(
         source_table_id: Annotated[int | None, Field(default=None)] = None,
@@ -115,7 +115,7 @@ def register(mcp: FastMCP) -> None:
             Field(description="Optional OverrideManagedOrganizationId header.", default=None),
         ] = None,
     ) -> Any:
-        """Get All File History by hostname and fullpath"""
+        """Get All File History by hostname and fullpath NOTE: spec marks every parameter optional, but the API returns 417 'Missing Parameters. Unable to load details.' unless `fullPath` plus one of (`hostname`, `computerId`) is supplied."""
         params = {
             "sourceTableId": source_table_id,
             "hostname": hostname,
