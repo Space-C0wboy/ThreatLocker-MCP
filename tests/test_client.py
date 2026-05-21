@@ -103,6 +103,26 @@ async def test_empty_body_204_returns_sentinel(httpx_mock, config):
     assert result == {"_empty_response": True, "_status_code": 204}
 
 
+async def test_json_null_body_returns_sentinel(httpx_mock, config):
+    """200 OK with a JSON `null` body should also surface the sentinel.
+
+    Some ThreatLocker endpoints (OnlineDevicesGetByParameters,
+    ApprovalRequestGetByParameters) return the literal `null` instead of an empty body
+    when there are no rows. Parsing that yields Python None, which MCP renders as
+    "(completed with no output)" -- same UX problem as the empty-body case.
+    """
+    httpx_mock.add_response(
+        method="GET",
+        url="https://api.example.test/portalApi/Computer",
+        content=b"null",
+        status_code=200,
+        headers={"content-type": "application/json"},
+    )
+    async with ThreatLockerClient(config) as c:
+        result = await c.get("/portalApi/Computer")
+    assert result == {"_empty_response": True, "_status_code": 200}
+
+
 # ---------------------------------------------------------------------------
 # Retry logic
 # ---------------------------------------------------------------------------
