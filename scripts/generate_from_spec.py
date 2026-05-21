@@ -79,7 +79,7 @@ DESCRIPTION_OVERRIDES: dict[tuple[str, str], str] = {
         " (a) PREFERRED -- use a match from `application_get_matching_list`."
         " When multiple matches come back, prefer a tenant-owned app (its"
         " `organizationId` equals the call's `organizationId`) over a master-org"
-        " / BUILT-IN app (`organizationName: \"master\"`). Set"
+        ' / BUILT-IN app (`organizationName: "master"`). Set'
         " `useMatchingApplication: true`, populate `matchingApplication` with the"
         " chosen result (applicationId, applicationName, name, organizationId,"
         " organizationName, osType, suggestedPolicyId, status, isMaintained,"
@@ -92,7 +92,7 @@ DESCRIPTION_OVERRIDES: dict[tuple[str, str], str] = {
         " osType, ...}`, leave the others as null-filled stubs."
         " (c) LAST RESORT -- create a new app. Set `useNewApplication: true` and"
         " set `newApplicationName` to a non-null derived name (e.g. file stem"
-        " title-cased: `vlc.exe` -> `\"VLC\"`). `null` returns HTTP 417 'Must"
+        ' title-cased: `vlc.exe` -> `"VLC"`). `null` returns HTTP 417 \'Must'
         " enter a name for a new application'."
         " Scope -- set exactly ONE on `policyLevel`:"
         " * This Computer (default): all three flags false"
@@ -366,26 +366,18 @@ def emit_model(name: str, schema: dict, models_in_scope: set[str]) -> str:
         # spec doesn't list them in `required` — C# value-type semantics, where
         # absent ~= zero but null is invalid. Verified end-to-end against the
         # permit_application endpoint after exclude_none=False was enabled.
-        is_non_nullable_primitive = (
-            spec_type in {"integer", "number", "boolean"} and not nullable
-        )
+        is_non_nullable_primitive = spec_type in {"integer", "number", "boolean"} and not nullable
 
         if is_non_nullable_primitive:
             # Honor an explicit spec `default` if present, else use the type's zero.
             spec_default = prop_schema.get("default")
             if spec_type == "boolean":
-                default_expr = (
-                    "True" if spec_default is True else "False"
-                )
+                default_expr = "True" if spec_default is True else "False"
             elif spec_type == "integer":
-                default_expr = (
-                    str(spec_default) if isinstance(spec_default, int) else "0"
-                )
+                default_expr = str(spec_default) if isinstance(spec_default, int) else "0"
             else:  # number
                 default_expr = (
-                    str(spec_default)
-                    if isinstance(spec_default, (int, float))
-                    else "0.0"
+                    str(spec_default) if isinstance(spec_default, (int, float)) else "0.0"
                 )
         elif not is_required or nullable:
             py_type = f"{py_type} | None"
@@ -397,9 +389,7 @@ def emit_model(name: str, schema: dict, models_in_scope: set[str]) -> str:
         alias_arg = f'alias="{prop_name}"' if py_field != prop_name else ""
         desc_arg = f"description={desc!r}" if desc else ""
         default_arg = f"default={default_expr}" if default_expr is not None else ""
-        field_args = ", ".join(
-            a for a in [default_arg, alias_arg, desc_arg] if a
-        )
+        field_args = ", ".join(a for a in [default_arg, alias_arg, desc_arg] if a)
 
         if field_args:
             lines.append(f"    {py_field}: {py_type} = Field({field_args})")
@@ -606,13 +596,9 @@ def generate_tools_module(
         if body_arg:
             exclude_none = (path, method) not in SEND_FULL_BODY_OVERRIDES
             if body_arg.startswith("list["):
-                body_line = (
-                    f"        body_json = [b.model_dump(by_alias=True, exclude_none={exclude_none}) for b in body]\n"
-                )
+                body_line = f"        body_json = [b.model_dump(by_alias=True, exclude_none={exclude_none}) for b in body]\n"
             else:
-                body_line = (
-                    f"        body_json = body.model_dump(by_alias=True, exclude_none={exclude_none})\n"
-                )
+                body_line = f"        body_json = body.model_dump(by_alias=True, exclude_none={exclude_none})\n"
         else:
             body_line = ""
 
