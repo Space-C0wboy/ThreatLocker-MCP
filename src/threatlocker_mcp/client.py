@@ -160,7 +160,20 @@ class ThreatLockerClient:
 
             ctype = response.headers.get("content-type", "")
             if "application/json" in ctype:
-                return response.json()
+                parsed = response.json()
+                # Some endpoints (OnlineDevicesGetByParameters,
+                # ApprovalRequestGetByParameters) return the JSON literal `null` instead of
+                # an empty body when there are no rows. Treat that the same as an empty body
+                # so callers don't see a silent None in MCP.
+                if parsed is None:
+                    logger.info(
+                        "json-null response body from %s %s (HTTP %d)",
+                        method,
+                        path,
+                        response.status_code,
+                    )
+                    return {"_empty_response": True, "_status_code": response.status_code}
+                return parsed
             return response.text
 
         # Unreachable — the last iteration always raises or returns.
