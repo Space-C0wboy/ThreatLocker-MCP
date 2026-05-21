@@ -122,6 +122,25 @@ DESCRIPTION_OVERRIDES: dict[tuple[str, str], str] = {
 # instead, since a single-param promotion can't express one-of semantics.
 REQUIRED_PARAM_OVERRIDES: dict[tuple[str, str], set[str]] = {}
 
+# Per-schema property name overrides. Some spec property names are mis-cased relative
+# to what the live API actually returns and accepts -- e.g. ThreatLockerActionDto
+# declares `fullpath`/`policyid`/`actionid` all-lowercase and `SerialNumber`/`DomainName`
+# PascalCase, but the API consistently uses `fullPath`/`policyId`/`actionId`/
+# `serialNumber`/`domainName`. Mapping each spec name to a canonical name here makes
+# the generated model use the canonical name as the Pydantic alias, so on-the-wire
+# JSON matches the live API and `extra="allow"` doesn't end up emitting duplicate
+# casings on round-trip (verified 2026-05-21 against a captured permit body).
+PROPERTY_NAME_OVERRIDES: dict[str, dict[str, str]] = {
+    "ThreatLockerActionDto": {
+        "fullpath": "fullPath",
+        "policyid": "policyId",
+        "actionid": "actionId",
+        "SerialNumber": "serialNumber",
+        "DomainName": "domainName",
+    },
+}
+
+
 # Endpoints that need the full DTO serialized -- including explicit `null` fields --
 # rather than the default `exclude_none=True` behavior. Most ThreatLocker endpoints
 # tolerate stripped nulls (they're queries/filters), but a few permit-style endpoints
@@ -353,9 +372,14 @@ def emit_model(name: str, schema: dict, models_in_scope: set[str]) -> str:
 
     lines.append("    model_config = ConfigDict(populate_by_name=True, extra='allow')")
 
+    overrides = PROPERTY_NAME_OVERRIDES.get(name, {})
     for prop_name, prop_schema in props.items():
+        # If the spec name is mis-cased relative to the live API, use the canonical
+        # name for both the Pydantic alias and the snake_case derivation. The original
+        # `prop_name` is still what appears in the spec's `required` array.
+        canonical = overrides.get(prop_name, prop_name)
         py_type = py_type_for_schema(prop_schema, models_in_scope)
-        py_field = snake(prop_name)
+        py_field = snake(canonical)
         is_required = prop_name in required
         nullable = prop_schema.get("nullable", False)
         spec_type = prop_schema.get("type")
@@ -386,7 +410,7 @@ def emit_model(name: str, schema: dict, models_in_scope: set[str]) -> str:
             default_expr = None  # required + non-primitive: no default emitted
 
         desc = prop_schema.get("description") or prop_schema.get("title")
-        alias_arg = f'alias="{prop_name}"' if py_field != prop_name else ""
+        alias_arg = f'alias="{canonical}"' if py_field != canonical else ""
         desc_arg = f"description={desc!r}" if desc else ""
         default_arg = f"default={default_expr}" if default_expr is not None else ""
         field_args = ", ".join(a for a in [default_arg, alias_arg, desc_arg] if a)
