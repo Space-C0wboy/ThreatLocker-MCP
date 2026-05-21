@@ -40,8 +40,7 @@ DESCRIPTION_OVERRIDES: dict[tuple[str, str], str] = {
         " 417 'Invalid Date Range' or HTTP 500."
     ),
     ("/portalapi/ApprovalRequest/ApprovalRequestGetByParameters", "post"): (
-        " NOTE: `statusId` is required (e.g. 1 for Pending). Calls without it return"
-        " HTTP 500."
+        " NOTE: `statusId` is required (e.g. 1 for Pending). Calls without it return HTTP 500."
     ),
 }
 
