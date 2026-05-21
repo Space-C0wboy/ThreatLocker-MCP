@@ -1,16 +1,19 @@
 """Generated tool registry."""
+
 from fastmcp import FastMCP
 
-from . import action_log
-from . import application
-from . import approval_request
-from . import computer
-from . import computer_group
-from . import maintenance_mode
-from . import online_devices
-from . import policy
-from . import report
-from . import system_audit
+from . import (
+    action_log,
+    application,
+    approval_request,
+    computer,
+    computer_group,
+    maintenance_mode,
+    online_devices,
+    policy,
+    report,
+    system_audit,
+)
 
 
 def register_all(mcp: FastMCP) -> None:
