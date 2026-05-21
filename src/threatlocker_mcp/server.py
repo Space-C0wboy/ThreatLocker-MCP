@@ -1,4 +1,5 @@
 """ThreatLocker MCP server — entrypoint."""
+
 from __future__ import annotations
 
 import argparse
@@ -62,6 +63,8 @@ def main() -> int:
         print(f"Configuration error: {e}", file=sys.stderr)
         return 2
 
+    # Config is already validated and cached by build_server(); retrieve it here
+    # only to read the HTTP host/port defaults — no second validation pass.
     config = get_config()
 
     try:
@@ -77,9 +80,15 @@ def main() -> int:
         import asyncio
 
         try:
-            asyncio.run(shutdown_client())
-        except RuntimeError:
-            # Event loop already closed by the transport runner — fine.
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Transport is still driving the loop — schedule cleanup instead.
+                loop.create_task(shutdown_client())
+            else:
+                loop.run_until_complete(shutdown_client())
+        except Exception:
+            # If we can't clean up (loop already closed, etc.) that's fine —
+            # OS will reclaim the connections when the process exits.
             pass
 
     return 0

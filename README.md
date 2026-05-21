@@ -1,52 +1,82 @@
-# threatlocker-mcp
+# ThreatLocker MCP
 
-> ## ⚠️ Use at your own risk
->
-> **This project was primarily "vibe-coded" with AI assistance** and is in **early development**. It is **not production-ready**.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+[![CI](https://github.com/Space-C0wboy/ThreatLocker-MCP/actions/workflows/ci.yml/badge.svg)](https://github.com/Space-C0wboy/ThreatLocker-MCP/actions/workflows/ci.yml)
+
+An [MCP](https://modelcontextprotocol.io/) server that exposes the [ThreatLocker Portal API](https://portalapi.h.threatlocker.com/swagger/index.html) as callable tools for AI assistants such as Claude Desktop and Claude Code.
+
+32 tools are generated directly from the official OpenAPI 3.0 spec, with fully-typed Pydantic request bodies, stdio and HTTP transports, and per-call organization override for parent/child tenant setups.
+
+---
+
+> [!WARNING]
+> **This project is in early development and is not production-ready.**
 >
 > - Endpoint mappings come from the published OpenAPI spec but have **not been exhaustively tested** against a live tenant.
-> - The server can perform **destructive actions** (enable/disable protection on computers, approve/deny security requests, move computers between organizations). A malformed call or a hallucinated tool argument from your AI assistant could change your ThreatLocker configuration in ways that affect endpoint security.
-> - There are **no rate-limit protections, no confirmation prompts, no audit logging** beyond what ThreatLocker itself records.
-> - Error messages from the API are surfaced verbatim to your AI assistant; this is convenient for debugging but means the assistant sees raw response bodies.
+> - The server can perform **destructive actions**: enabling/disabling protection on endpoints, approving or denying security requests, and moving computers between organizations. A hallucinated tool argument from your AI assistant could alter your ThreatLocker configuration in ways that affect endpoint security.
+> - There are **no built-in rate-limit protections or confirmation prompts** beyond what ThreatLocker itself records.
 >
 > **Recommended posture:**
-> - Test against a non-production / lab tenant first.
-> - Use a ThreatLocker API key with the **minimum permissions** your use case actually requires — don't hand it a full-admin key.
-> - Review every destructive tool call the assistant proposes before letting it execute. In Claude Desktop, individual tool calls require approval by default; **keep that on**.
-> - Treat the API key like portal-admin credentials, because functionally it is one.
+> - Test against a non-production or lab tenant before deploying to a live environment.
+> - Use a ThreatLocker API key scoped to the **minimum permissions** your use case requires.
+> - Review every destructive tool call before allowing execution. Claude Desktop requires tool-call approval by default — keep that enabled.
+> - Treat the API key with the same care as portal admin credentials, because functionally it is one.
 >
-> If you find a bug, please open a GitHub issue. If you find a *security* bug, please contact the maintainer directly rather than filing a public issue.
+> Found a bug? [Open an issue](https://github.com/Space-C0wboy/ThreatLocker-MCP/issues). Found a security bug? Contact the maintainer directly rather than filing a public issue.
 
-An [MCP](https://modelcontextprotocol.io/) server that exposes the [ThreatLocker Portal API](https://portalapi.h.threatlocker.com/swagger/index.html) as tools an AI assistant (Claude Desktop, Claude Code, custom clients) can call.
+---
 
-32 tools generated from the official OpenAPI 3.0 spec, with typed Pydantic request bodies, stdio + HTTP transports, and per-call organization override for parent/child tenants.
+## Table of Contents
 
-## Quick start (recommended: `uvx`)
+- [Quick Start](#quick-start)
+- [Tools](#tools)
+- [Configuration](#configuration)
+- [Multi-Organization Usage](#multi-organization-usage)
+- [Example Prompts](#example-prompts)
+- [Local Development](#local-development)
+- [Regenerating from Spec](#regenerating-from-spec)
+- [Project Layout](#project-layout)
+- [Security Notes](#security-notes)
+- [Known API Limitations](#known-api-limitations)
+- [Troubleshooting](#troubleshooting)
+
+---
+
+## Quick Start
+
+The recommended installation method uses [`uvx`](https://docs.astral.sh/uv/), which handles dependency isolation automatically with no manual virtual environment setup.
 
 ### Prerequisites
 
-- **Git** must be installed and on `PATH`. `uvx` uses it to clone the repo.
-  - Windows: `winget install --id Git.Git -e --source winget`, or download from [git-scm.com](https://git-scm.com/download/win)
-  - macOS: `brew install git` (or use Xcode Command Line Tools)
-  - Linux: `apt install git` / `dnf install git` / etc.
-  - Verify with `git --version` in a fresh terminal.
-- **`uv`** (which provides `uvx`):
+**Git** — required by `uvx` to clone the repository.
 
-**macOS / Linux:**
+| Platform | Install command |
+|----------|----------------|
+| Windows | `winget install --id Git.Git -e --source winget` |
+| macOS | `brew install git` (or Xcode Command Line Tools) |
+| Linux | `apt install git` / `dnf install git` |
+
+Verify with `git --version` in a fresh terminal after installation.
+
+**uv** — provides the `uvx` runner.
+
 ```bash
+# macOS / Linux
 curl -LsSf https://astral.sh/uv/install.sh | sh
-```
 
-**Windows (PowerShell):**
-```powershell
+# Windows (PowerShell)
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-After installing Git and `uv`, close and reopen any terminal so PATH is refreshed.
+Reopen your terminal after installing so `PATH` is refreshed.
 
 ### Configure Claude Desktop
 
-Add this block to your Claude Desktop config (`%APPDATA%\Claude\claude_desktop_config.json` on Windows, `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+Add the following block to your Claude Desktop configuration file:
+
+- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
 
 ```json
 {
@@ -69,118 +99,155 @@ Add this block to your Claude Desktop config (`%APPDATA%\Claude\claude_desktop_c
 }
 ```
 
-> **Windows note:** the `PATHEXT` entry is required on Windows. Claude Desktop doesn't pass `PATHEXT` to child processes, which prevents `uv` from finding `git.exe` even when Git is installed and on `PATH`. The error in the log is `Git executable not found`; adding `PATHEXT` fixes it. Non-Windows users can omit the line.
+> **Windows note:** The `PATHEXT` entry is required. Claude Desktop does not pass `PATHEXT` to child processes, which prevents `uv` from locating `git.exe` even when Git is installed. The symptom is a `Git executable not found` error in the log. Non-Windows users can omit that line.
 
-Fully quit Claude Desktop (right-click the tray icon → Quit on Windows, ⌘Q on macOS), then reopen. The first launch takes 30–60 seconds while `uvx` clones the repo and installs dependencies; subsequent launches are instant. You'll see 32 ThreatLocker tools in the tools menu.
+Fully quit Claude Desktop (tray icon → **Quit** on Windows; **⌘Q** on macOS), then reopen it. The first launch takes 30–60 seconds while `uvx` clones the repository and installs dependencies. Subsequent launches are nearly instant due to caching. You should see 32 ThreatLocker tools listed in the tools menu.
 
-To pin a specific version once you tag a release, change the URL to `git+https://github.com/Space-C0wboy/ThreatLocker-MCP@v0.1.0`. To force `uvx` to re-fetch after pushing updates, add `"--refresh"` as the first item in `args`.
+**Pinning a version:** Once a release is tagged, replace the URL with `git+https://github.com/Space-C0wboy/ThreatLocker-MCP@v0.1.0` to lock to a specific version.
+
+**Forcing a refresh:** Add `"--refresh"` as the first item in `args` to force `uvx` to re-fetch after an update has been pushed.
+
+---
 
 ## Tools
 
-| Area | Tools |
-|---|---|
-| **Computers** (8) | search, get/edit, enable/disable protection, maintenance mode, baseline rescan, move between orgs |
-| **Approval Requests** (8) | search, get by id, count pending, permit application, reject, ignore, take ownership |
-| **Action Log** (4) | search, get by id, file history, file download details |
-| **System Audit** (2) | search, health center |
-| **Computer Groups** (2) | get groups + computers, dropdown by org |
-| **Maintenance Mode** (3) | get by computer, insert, end by id |
-| **Application** (2) | get by id, get matching list |
-| **Policy** (1) | get by id |
-| **Online Devices** (1) | get by parameters |
-| **Reports** (1) | get by organization |
+| Area | Count | Capabilities |
+|------|:-----:|--------------|
+| **Computers** | 8 | Search, get/edit details, enable/disable protection, update maintenance mode, baseline rescan, move between orgs |
+| **Approval Requests** | 8 | Search, get by ID, count pending, get permit details, approve, reject, ignore, take ownership |
+| **Action Log** | 4 | Search by parameters, get by ID, file history, file download details |
+| **Maintenance Mode** | 3 | Get schedule by computer, insert, end by ID |
+| **System Audit** | 2 | Search by parameters, health center |
+| **Computer Groups** | 2 | Get groups with computers, dropdown by org |
+| **Application** | 2 | Get by ID, get matching list |
+| **Policy** | 1 | Get by ID |
+| **Online Devices** | 1 | Get by parameters |
+| **Reports** | 1 | Get by organization |
 
-All request bodies are typed Pydantic models (54 generated from the spec) so callers get autocomplete and validation; the wire format uses the original camelCase aliases.
+All request bodies are typed Pydantic models (54 generated from the spec), so the AI assistant receives full schema validation and autocomplete. The wire format preserves the original camelCase field names expected by the API.
+
+---
 
 ## Configuration
 
-| Variable | Required | Description |
-|---|---|---|
-| `THREATLOCKER_API_KEY` | yes | API key from ThreatLocker Portal → Modules → API |
-| `THREATLOCKER_ORG_ID` | yes | Default org GUID (parent or child). Find it in the portal URL after switching into the org you want as default. |
-| `THREATLOCKER_BASE_URL` | yes | Your portal API URL (e.g. `https://portalapi.h.threatlocker.com`) |
-| `THREATLOCKER_TIMEOUT` | no | Per-request timeout seconds (default 30) |
-| `LOG_LEVEL` | no | DEBUG / INFO / WARNING / ERROR |
-| `MCP_HTTP_HOST` | no | HTTP bind host (default 127.0.0.1) |
-| `MCP_HTTP_PORT` | no | HTTP bind port (default 8765) |
+Set the following environment variables, either in your shell or in a `.env` file in the project root (see `.env.example`).
 
-The base URL is the subdomain shown in your portal — the same letter (`.h.`, `.g.`, `.e.`, etc.) the portal uses.
+| Variable | Required | Default | Description |
+|----------|:--------:|---------|-------------|
+| `THREATLOCKER_API_KEY` | ✅ | — | API key from **ThreatLocker Portal → Modules → API** |
+| `THREATLOCKER_ORG_ID` | ✅ | — | Default organization GUID. Find it in the portal URL after switching into the target org. |
+| `THREATLOCKER_BASE_URL` | ✅ | — | Portal API base URL. Use the same subdomain letter shown in your portal (`.h.`, `.g.`, `.e.`, etc.) — e.g. `https://portalapi.h.threatlocker.com` |
+| `THREATLOCKER_TIMEOUT` | — | `30` | Per-request timeout in seconds |
+| `LOG_LEVEL` | — | `INFO` | Logging verbosity: `DEBUG` / `INFO` / `WARNING` / `ERROR` |
+| `MCP_HTTP_HOST` | — | `127.0.0.1` | Bind host for the HTTP transport |
+| `MCP_HTTP_PORT` | — | `8765` | Bind port for the HTTP transport |
 
-## Multi-organization usage
+---
 
-For setups with a parent org and child orgs (e.g. one child per department), every tool accepts:
+## Multi-Organization Usage
 
-- `organization_id` — optional override of the `ManagedOrganizationId` header. Without it, `THREATLOCKER_ORG_ID` from the env is used.
-- `override_organization_id` — optional `OverrideManagedOrganizationId` header for scenarios that need both.
+Every tool accepts two optional parameters for targeting specific organizations in a parent/child tenant hierarchy:
 
-The public API has no "list organizations" endpoint, so you'll need to know your child-org GUIDs ahead of time. Find them in the portal URL while switched into each child org, or in the Organization settings page.
+- **`organization_id`** — overrides the `ManagedOrganizationId` request header. When omitted, `THREATLOCKER_ORG_ID` is used.
+- **`override_organization_id`** — sets the `OverrideManagedOrganizationId` header for scenarios that require both headers simultaneously.
 
-## Example asks
+> **Finding child org GUIDs:** The public API does not expose a "list organizations" endpoint. Org GUIDs can be found in the portal URL while switched into each child org, or on the Organization settings page.
 
+---
+
+## Example Prompts
+
+**Investigate denied activity:**
 > "Search the action log for any denied executions on hostname SRV-DB-01 in the last 24 hours."
 
-→ Claude calls `action_log_get_by_parameters_v2` with an `ActionLogParamsDto`.
+→ Calls `action_log_get_by_parameters_v2` with an `ActionLogParamsDto`.
 
-> "Show me pending approval requests for the Cloud Services org."
+**Review pending approvals:**
+> "Show me all pending approval requests for the Cloud Services org."
 
-→ Claude calls `approval_request_get_by_parameters` with `organization_id=<cloud-svc-guid>`.
+→ Calls `approval_request_get_by_parameters` with `organization_id=<cloud-svc-guid>`.
 
+**Approve a request:**
 > "Approve request abc-123 at computer scope with the note 'verified vendor'."
 
-→ Claude calls `approval_request_permit_application` with a `PermitApplicationDto`.
+→ Calls `approval_request_permit_application` with a `PermitApplicationDto`.
 
-## Local development
+**Schedule maintenance:**
+> "Put workstation WS-FINANCE-04 into maintenance mode for the next two hours."
 
-If you want to hack on the code instead of running it via `uvx`:
+→ Calls `maintenance_mode_insert` with a `MaintenanceModeInsertDto`.
+
+---
+
+## Local Development
 
 ```bash
 git clone https://github.com/Space-C0wboy/ThreatLocker-MCP
-cd threatlocker-mcp
-python -m venv .venv
-. .venv/bin/activate          # Windows PowerShell: .venv\Scripts\Activate.ps1
+cd ThreatLocker-MCP
+
+# Install dependencies (uv recommended)
+uv sync --extra dev
+
+# Or with pip
 pip install -e ".[dev]"
-cp .env.example .env          # then edit .env
-pytest                        # 4 tests, all mocked
+
+# Set up environment
+cp .env.example .env   # then fill in your values
+
+# Run the test suite (15 tests, all mocked — no live API calls)
+pytest
+
+# Verify the CLI
 threatlocker-mcp --help
 ```
 
-Run as HTTP instead of stdio:
+**Running with HTTP transport** instead of stdio:
 
 ```bash
 threatlocker-mcp --transport http --port 8765
 ```
 
-## Regenerating from spec
+**Linting and formatting:**
 
-When ThreatLocker updates their API, refresh the spec and re-run codegen:
+```bash
+ruff check .
+ruff format .
+```
+
+---
+
+## Regenerating from Spec
+
+When ThreatLocker updates their API, pull the latest spec and re-run the code generator:
 
 ```bash
 curl https://portalapi.h.threatlocker.com/swagger/public/swagger.json -o spec.json
 python scripts/generate_from_spec.py spec.json
 ```
 
-To add or remove tools from the curated 32, edit `CHOSEN_ENDPOINTS` at the top of `scripts/generate_from_spec.py` and regenerate.
+This overwrites `src/threatlocker_mcp/models.py` and all tool modules under `src/threatlocker_mcp/tools/`. The generator is idempotent — running it multiple times produces the same output.
 
-## Project layout
+To add or remove tools from the curated set, edit the `CHOSEN_ENDPOINTS` list at the top of `scripts/generate_from_spec.py` and regenerate.
+
+---
+
+## Project Layout
 
 ```
-threatlocker-mcp/
+ThreatLocker-MCP/
 ├── pyproject.toml
 ├── README.md
 ├── LICENSE
-├── .gitignore
 ├── .env.example
-├── spec.json                       # OpenAPI snapshot — input to codegen
+├── spec.json                        # OpenAPI snapshot — input to codegen
 ├── scripts/
-│   └── generate_from_spec.py       # Models + tools codegen
+│   └── generate_from_spec.py        # Generates models.py and tool modules
 ├── src/threatlocker_mcp/
-│   ├── __init__.py
-│   ├── config.py                   # env-var loading + validation
-│   ├── client.py                   # async httpx client w/ auth + org headers
-│   ├── server.py                   # FastMCP entrypoint (stdio + http)
-│   ├── models.py                   # GENERATED — Pydantic models
-│   └── tools/                      # GENERATED — one module per ThreatLocker tag
-│       ├── __init__.py
+│   ├── config.py                    # Environment variable loading and validation
+│   ├── client.py                    # Async httpx client with auth, org headers, and retry logic
+│   ├── server.py                    # FastMCP server entrypoint (stdio + HTTP transports)
+│   ├── models.py                    # GENERATED — Pydantic request/response models
+│   └── tools/                       # GENERATED — one module per ThreatLocker API tag
 │       ├── action_log.py
 │       ├── application.py
 │       ├── approval_request.py
@@ -192,24 +259,32 @@ threatlocker-mcp/
 │       ├── report.py
 │       └── system_audit.py
 └── tests/
-    └── test_client.py
+    └── test_client.py               # 15 tests; all mocked, no live API calls required
 ```
 
-## Security notes
+---
 
-- API keys are read from env vars only, never logged.
-- The HTTP transport binds to `127.0.0.1` by default. **Don't** expose it to the public internet without adding authentication (FastMCP supports OAuth).
-- This server can perform destructive actions (enable/disable protection, approve/deny requests, move computers between orgs). Treat the API key with the same care as portal admin credentials.
-- ThreatLocker error responses are surfaced verbatim in tool outputs — handy for debugging, but your AI assistant will see them.
+## Security Notes
 
-## Known API limitations
+- **API key handling:** Keys are read from environment variables only and are never written to logs.
+- **HTTP transport:** Binds to `127.0.0.1` by default. Do not expose it to the public internet without adding authentication — FastMCP supports OAuth for this purpose.
+- **Destructive operations:** This server can enable or disable endpoint protection, approve or deny security requests, and move computers between organizations. The API key should be treated with the same care as portal admin credentials.
+- **Error message exposure:** ThreatLocker API error responses are surfaced verbatim in tool outputs. This aids debugging but means your AI assistant will see raw API response bodies.
 
-These are gaps in ThreatLocker's public API, not this server:
+---
 
-- **No "list organizations" endpoint.** Child-org GUIDs must be known out of band.
-- **No isolate/release endpoints.** `computer_enable_protection`/`computer_disable_protection` control policy enforcement, not network isolation.
-- **Policy support is read-only by ID.** No list, create, update, or delete via the public API.
-- **No application definitions.** The `Application` endpoints are read-only metadata queries.
+## Known API Limitations
+
+The following are gaps in ThreatLocker's public API, not limitations of this server:
+
+| Limitation | Detail |
+|-----------|--------|
+| No organization listing | Child-org GUIDs must be obtained out-of-band (portal URL or settings page) |
+| No network isolation | `computer_enable_protection` / `computer_disable_protection` toggle policy enforcement, not network isolation |
+| Policy management is read-only | Policies can be retrieved by ID only; create, update, and delete are not available via the public API |
+| Application data is read-only | The `Application` endpoints return metadata only |
+
+---
 
 ## Known API quirks
 
@@ -221,20 +296,53 @@ These are server-side oddities worth knowing when an LLM is driving the tools:
 
 ## Troubleshooting
 
-Logs live at `%APPDATA%\Claude\logs\mcp-server-threatlocker.log` on Windows and `~/Library/Logs/Claude/mcp-server-threatlocker.log` on macOS. Most problems are visible there in plain text.
+**Where are the logs?**
 
-**`Git executable not found` on Windows** — Claude Desktop doesn't pass `PATHEXT` to child processes, so `uv` can't recognize `git.exe` as executable. Add the `PATHEXT` entry from the [Configure Claude Desktop](#configure-claude-desktop) example to the `env` block.
+| Platform | Path |
+|----------|------|
+| Windows | `%APPDATA%\Claude\logs\mcp-server-threatlocker.log` |
+| macOS | `~/Library/Logs/Claude/mcp-server-threatlocker.log` |
 
-**`Could not load app settings ... Expected ',' or '}'`** — JSON syntax error in `claude_desktop_config.json`. Every item in an object needs a comma after it except the last one; when you add a new last item, the previously-last item needs a comma added. Validate the file at [jsonlint.com](https://jsonlint.com/).
+Most startup and connection issues are visible in plain text in these files.
 
-**`Configuration error: THREATLOCKER_API_KEY is required`** — the `env` block is missing or has a typo. Each variable needs to be a string in the JSON, not a number or unquoted value.
+---
 
-**Tools menu shows nothing after restart** — confirm Claude Desktop was fully quit (right-click the tray icon → Quit on Windows; the window close button isn't enough). Then check the log for the actual error.
+**`Git executable not found` (Windows)**
 
-**First launch hangs for 60+ seconds** — that's `uvx` cloning the repo and building dependencies on first use. Normal. Subsequent launches are nearly instant due to the cache.
+Claude Desktop does not pass `PATHEXT` to child processes, so `uv` cannot recognize `git.exe` as an executable even when Git is on `PATH`. Add the `PATHEXT` entry shown in the [Configure Claude Desktop](#configure-claude-desktop) example to your `env` block.
 
-**After pushing an update, Claude still runs the old version** — `uvx` caches by commit. Add `"--refresh"` as the first item in `args` to force a re-fetch, or pin a version tag (`@v0.2.0`) so updates are explicit.
+---
+
+**`Could not load app settings ... Expected ',' or '}'`**
+
+JSON syntax error in `claude_desktop_config.json`. Every key-value pair except the last one in an object requires a trailing comma. Paste the file contents into [jsonlint.com](https://jsonlint.com/) to identify the exact location.
+
+---
+
+**`Configuration error: THREATLOCKER_API_KEY is required`**
+
+The `env` block in your config is missing or contains a typo. All values must be JSON strings (quoted). Confirm each variable name matches exactly.
+
+---
+
+**Tools menu is empty after restart**
+
+Confirm Claude Desktop was fully quit — on Windows the window close button is not sufficient; right-click the tray icon and choose **Quit**. Then check the log file for the underlying error.
+
+---
+
+**First launch hangs for 60+ seconds**
+
+Expected behaviour. `uvx` is cloning the repository and building the dependency environment on first use. Subsequent launches are nearly instant due to the local cache.
+
+---
+
+**Claude still runs the old version after an update**
+
+`uvx` caches by commit hash. Add `"--refresh"` as the first item in `args` to force a re-fetch, or pin an explicit version tag (e.g. `@v0.2.0`) so updates require a deliberate change.
+
+---
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+[MIT](LICENSE)

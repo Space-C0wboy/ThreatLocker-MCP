@@ -14,6 +14,7 @@ Design choices:
 - Query/path params become tool function arguments. JSON request bodies become
   a single typed `body` argument using the generated model.
 """
+
 from __future__ import annotations
 
 import json
@@ -100,9 +101,20 @@ def snake(name: str) -> str:
     s = re.sub(r"[^a-z0-9_]+", "_", s).strip("_")
     # Avoid Python keywords and names that shadow BaseModel methods/attrs.
     shadowed = {
-        "id", "type", "json", "schema", "fields", "dict",
-        "copy", "construct", "parse_obj", "parse_raw", "validate",
-        "model_dump", "model_config", "model_fields",
+        "id",
+        "type",
+        "json",
+        "schema",
+        "fields",
+        "dict",
+        "copy",
+        "construct",
+        "parse_obj",
+        "parse_raw",
+        "validate",
+        "model_dump",
+        "model_config",
+        "model_fields",
     }
     if keyword.iskeyword(s) or s in shadowed:
         s = s + "_"
@@ -124,6 +136,37 @@ def operation_id_to_func(path: str, method: str) -> str:
     return snake(tail)
 
 
+def path_to_description(path: str, method: str) -> str:
+    """Derive a readable description from a path when the spec has no summary.
+
+    '/portalapi/ActionLog/ActionLogGetByIdV2', 'get'
+    → 'Action Log: Get By Id V2'
+    """
+    tail = path.rsplit("/", 1)[-1]
+    # Strip a common prefix that repeats the tag (e.g. "ActionLog" in "ActionLogGetByIdV2")
+    parts = path.strip("/").split("/")
+    tag_segment = parts[-2] if len(parts) >= 2 else ""
+    if tag_segment and tail.startswith(tag_segment):
+        tail = tail[len(tag_segment) :]
+    # CamelCase → words
+    words = re.sub(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", " ", tail).strip()
+    tag_words = re.sub(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", " ", tag_segment).strip()
+    return f"{tag_words}: {words}" if tag_words and words else (words or f"{method.upper()} {path}")
+
+
+def _iter_refs(node: Any):
+    """Yield every $ref string found anywhere in a JSON-schema fragment."""
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if k == "$ref" and isinstance(v, str):
+                yield v
+            else:
+                yield from _iter_refs(v)
+    elif isinstance(node, list):
+        for item in node:
+            yield from _iter_refs(item)
+
+
 def collect_referenced_schemas(spec: dict, start_refs: list[str]) -> set[str]:
     """BFS the $ref graph starting from a list of schema names."""
     schemas = spec["components"]["schemas"]
@@ -134,20 +177,10 @@ def collect_referenced_schemas(spec: dict, start_refs: list[str]) -> set[str]:
         if name in seen or name not in schemas:
             continue
         seen.add(name)
-        # walk this schema for more refs
-        def walk(node: Any) -> None:
-            if isinstance(node, dict):
-                for k, v in node.items():
-                    if k == "$ref" and isinstance(v, str):
-                        ref_name = v.rsplit("/", 1)[-1]
-                        if ref_name not in seen:
-                            queue.append(ref_name)
-                    else:
-                        walk(v)
-            elif isinstance(node, list):
-                for item in node:
-                    walk(item)
-        walk(schemas[name])
+        for ref in _iter_refs(schemas[name]):
+            ref_name = ref.rsplit("/", 1)[-1]
+            if ref_name not in seen:
+                queue.append(ref_name)
     return seen
 
 
@@ -234,19 +267,23 @@ def emit_model(name: str, schema: dict, models_in_scope: set[str]) -> str:
         is_required = prop_name in required
         nullable = prop_schema.get("nullable", False)
         if not is_required or nullable:
-            py_type = f"Optional[{py_type}]"
+            py_type = f"{py_type} | None"
             default = " = None"
         else:
             default = ""
 
         desc = prop_schema.get("description") or prop_schema.get("title")
         alias_arg = f'alias="{prop_name}"' if py_field != prop_name else ""
-        desc_arg = f'description={desc!r}' if desc else ""
-        field_args = ", ".join(a for a in [
-            "default=None" if default == " = None" else "",
-            alias_arg,
-            desc_arg,
-        ] if a)
+        desc_arg = f"description={desc!r}" if desc else ""
+        field_args = ", ".join(
+            a
+            for a in [
+                "default=None" if default == " = None" else "",
+                alias_arg,
+                desc_arg,
+            ]
+            if a
+        )
 
         if field_args:
             lines.append(f"    {py_field}: {py_type} = Field({field_args})")
@@ -272,18 +309,8 @@ def generate_models(spec: dict, needed_schemas: set[str]) -> str:
         if name in visited or name not in needed_schemas:
             return
         visited.add(name)
-        node = schemas.get(name, {})
-        def walk(n: Any) -> None:
-            if isinstance(n, dict):
-                for k, v in n.items():
-                    if k == "$ref" and isinstance(v, str):
-                        visit(v.rsplit("/", 1)[-1])
-                    else:
-                        walk(v)
-            elif isinstance(n, list):
-                for x in n:
-                    walk(x)
-        walk(node)
+        for ref in _iter_refs(schemas.get(name, {})):
+            visit(ref.rsplit("/", 1)[-1])
         order.append(name)
 
     for n in sorted(needed_schemas):
@@ -296,7 +323,7 @@ def generate_models(spec: dict, needed_schemas: set[str]) -> str:
         '"""',
         "from __future__ import annotations",
         "",
-        "from typing import Any, Optional",
+        "from typing import Any",
         "",
         "from pydantic import BaseModel, ConfigDict, Field",
         "",
@@ -331,13 +358,21 @@ def generate_tools_module(
         '"""',
         "from __future__ import annotations",
         "",
-        "from typing import Annotated, Any, Optional",
+        "from typing import Annotated, Any",
         "",
         "from fastmcp import FastMCP",
         "from pydantic import Field",
         "",
+    ]
+
+    # Only import models when this tag has at least one body parameter.
+    needs_models = any(
+        (op.get("requestBody") or {}).get("content", {}).get("application/json") for _, _, op in ops
+    )
+    if needs_models:
+        lines.append("from .. import models")
+    lines += [
         "from ..client import get_client",
-        "from .. import models",
         "",
         "",
         "def register(mcp: FastMCP) -> None:",
@@ -347,7 +382,9 @@ def generate_tools_module(
         func_name = operation_id_to_func(path, method)
         summary = (op.get("summary") or op.get("description") or "").strip()
         # First line only, escaped
-        first_line = summary.split("\n")[0].strip() if summary else f"{method.upper()} {path}"
+        first_line = (
+            summary.split("\n")[0].strip() if summary else path_to_description(path, method)
+        )
         # Full description (cleaned up for the docstring)
         full_desc = summary.replace("\r\n", "\n").strip() or first_line
         override = DESCRIPTION_OVERRIDES.get((path, method))
@@ -359,14 +396,16 @@ def generate_tools_module(
         required_args: list[str] = []
         optional_args: list[str] = []
         params_dict_items: list[tuple[str, str]] = []  # (py_name, source_name)
-        body_arg: Optional[str] = None  # noqa: F821
+        body_arg: str | None = None
 
         parameters = op.get("parameters", [])
         query_params = [p for p in parameters if p.get("in") == "query"]
         header_params = [
-            p for p in parameters
+            p
+            for p in parameters
             if p.get("in") == "header"
-            and p.get("name") not in ("Authorization", "ManagedOrganizationId", "OverrideManagedOrganizationId")
+            and p.get("name")
+            not in ("Authorization", "ManagedOrganizationId", "OverrideManagedOrganizationId")
         ]
 
         for p in query_params:
@@ -379,11 +418,13 @@ def generate_tools_module(
             desc_kw = f"description={desc!r}, " if desc else ""
             if required:
                 if desc:
-                    required_args.append(f"        {py_name}: Annotated[{py_type}, Field(description={desc!r})]")
+                    required_args.append(
+                        f"        {py_name}: Annotated[{py_type}, Field(description={desc!r})]"
+                    )
                 else:
                     required_args.append(f"        {py_name}: {py_type}")
             else:
-                opt_type = f"Optional[{py_type}]"
+                opt_type = f"{py_type} | None"
                 optional_args.append(
                     f"        {py_name}: Annotated[{opt_type}, Field({desc_kw}default=None)] = None"
                 )
@@ -394,7 +435,7 @@ def generate_tools_module(
             name = p["name"]
             py_name = snake(name)
             optional_args.append(
-                f'        {py_name}: Annotated[Optional[str], Field(description="Header: {name}", default=None)] = None'
+                f'        {py_name}: Annotated[str | None, Field(description="Header: {name}", default=None)] = None'
             )
 
         # Request body
@@ -422,8 +463,12 @@ def generate_tools_module(
             body_arg = body_schema_ref
 
         # Org override is always optional
-        optional_args.append('        organization_id: Annotated[Optional[str], Field(description="Override the default organization (ManagedOrganizationId header).", default=None)] = None')
-        optional_args.append('        override_organization_id: Annotated[Optional[str], Field(description="Optional OverrideManagedOrganizationId header.", default=None)] = None')
+        optional_args.append(
+            '        organization_id: Annotated[str | None, Field(description="Override the default organization (ManagedOrganizationId header).", default=None)] = None'
+        )
+        optional_args.append(
+            '        override_organization_id: Annotated[str | None, Field(description="Optional OverrideManagedOrganizationId header.", default=None)] = None'
+        )
 
         # Required args first, optional args (with defaults) after. Python syntax requires this.
         args = required_args + optional_args
@@ -443,7 +488,9 @@ def generate_tools_module(
             if body_arg.startswith("list["):
                 body_line = "        body_json = [b.model_dump(by_alias=True, exclude_none=True) for b in body]\n"
             else:
-                body_line = "        body_json = body.model_dump(by_alias=True, exclude_none=True)\n"
+                body_line = (
+                    "        body_json = body.model_dump(by_alias=True, exclude_none=True)\n"
+                )
         else:
             body_line = ""
 
@@ -482,7 +529,7 @@ def generate_tools_module(
         )
 
         tool_block = (
-            f'    @mcp.tool(name="{func_name}", description={first_line[:200]!r})\n'
+            f'    @mcp.tool(name="{func_name}", description={first_line[:600]!r})\n'
             f"    async def {func_name}(\n"
             f"{sig},\n"
             f"    ) -> Any:\n"
@@ -518,17 +565,8 @@ def main() -> int:
         chosen_ops_by_tag[tag].append((path, method, op))
 
         # Collect refs from this op
-        def walk(n: Any) -> None:
-            if isinstance(n, dict):
-                for k, v in n.items():
-                    if k == "$ref" and isinstance(v, str):
-                        schema_seed.append(v.rsplit("/", 1)[-1])
-                    else:
-                        walk(v)
-            elif isinstance(n, list):
-                for x in n:
-                    walk(x)
-        walk(op)
+        for ref in _iter_refs(op):
+            schema_seed.append(ref.rsplit("/", 1)[-1])
 
     needed = collect_referenced_schemas(spec, schema_seed)
     print(f"Chosen endpoints: {sum(len(v) for v in chosen_ops_by_tag.values())}", file=sys.stderr)
@@ -558,21 +596,26 @@ def main() -> int:
         print(f"Wrote tools/{module_name}.py ({len(ops)} tools)", file=sys.stderr)
 
     # Write tools/__init__.py
+    mod_names = [mod for _tag, mod in tag_modules]
     init_lines = [
         '"""Generated tool registry."""',
         "from fastmcp import FastMCP",
         "",
+        "from . import (",
     ]
-    for _tag, mod in tag_modules:
-        init_lines.append(f"from . import {mod}")
-    init_lines.append("")
-    init_lines.append("")
-    init_lines.append("def register_all(mcp: FastMCP) -> None:")
-    for _tag, mod in tag_modules:
+    for mod in mod_names:
+        init_lines.append(f"    {mod},")
+    init_lines += [
+        ")",
+        "",
+        "",
+        "def register_all(mcp: FastMCP) -> None:",
+    ]
+    for mod in mod_names:
         init_lines.append(f"    {mod}.register(mcp)")
     init_lines.append("")
     (tools_dir / "__init__.py").write_text("\n".join(init_lines), encoding="utf-8")
-    print(f"Wrote tools/__init__.py", file=sys.stderr)
+    print("Wrote tools/__init__.py", file=sys.stderr)
 
     return 0
 
