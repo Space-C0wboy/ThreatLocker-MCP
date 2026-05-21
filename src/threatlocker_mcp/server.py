@@ -25,10 +25,11 @@ def build_server() -> FastMCP:
     mcp = FastMCP(
         name="threatlocker-mcp",
         instructions=(
-            "MCP server for the ThreatLocker Portal API. Use `list_organizations` "
-            "first to discover org IDs, then pass `organization_id` to other tools "
-            "to target a specific child org. Without `organization_id`, the server's "
-            "default org is used."
+            "MCP server for the ThreatLocker Portal API. Call `list_organizations` "
+            "(optionally with `search_text`) first to discover the org GUIDs this "
+            "API key can target, then pass `organization_id` to other tools to "
+            "target a specific child/parent org. Without `organization_id`, the "
+            "server's default org (THREATLOCKER_ORG_ID) is used."
         ),
     )
 
@@ -76,19 +77,16 @@ def main() -> int:
             # FastMCP's HTTP transport is "streamable-http" (modern spec).
             mcp.run(transport="http", host=host, port=port)
     finally:
-        # Best-effort shutdown of the shared HTTP client.
+        # Best-effort shutdown of the shared HTTP client. FastMCP has already
+        # closed its event loop by the time we get here, so we run shutdown in
+        # a fresh loop via asyncio.run. If that itself fails (e.g. we're being
+        # called from inside another loop), drop the cleanup — the OS will
+        # reclaim sockets on process exit.
         import asyncio
 
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # Transport is still driving the loop — schedule cleanup instead.
-                loop.create_task(shutdown_client())
-            else:
-                loop.run_until_complete(shutdown_client())
-        except Exception:
-            # If we can't clean up (loop already closed, etc.) that's fine —
-            # OS will reclaim the connections when the process exits.
+            asyncio.run(shutdown_client())
+        except RuntimeError:
             pass
 
     return 0

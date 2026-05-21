@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any
 
 import httpx
@@ -14,6 +17,34 @@ logger = logging.getLogger(__name__)
 
 _RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
 _MAX_RETRIES = 3
+# Cap any server-suggested Retry-After at this value (seconds) so a misbehaving
+# upstream can't park us indefinitely.
+_MAX_RETRY_AFTER_SECONDS = 60.0
+
+
+def _parse_retry_after(header_value: str | None) -> float | None:
+    """Parse a Retry-After header (RFC 7231 §7.1.3).
+
+    Accepts either an integer/float seconds value or an HTTP-date. Returns None
+    if the header is absent or unparseable.
+    """
+    if not header_value:
+        return None
+    value = header_value.strip()
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        pass
+    try:
+        when = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    if when is None:
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    delta = (when - datetime.now(timezone.utc)).total_seconds()
+    return max(0.0, delta)
 
 
 class ThreatLockerAPIError(RuntimeError):
@@ -38,6 +69,8 @@ class ThreatLockerClient:
     def __init__(self, config: Config | None = None):
         self._config = config or get_config()
         self._client: httpx.AsyncClient | None = None
+        # Guards lazy connect inside request() against concurrent first-callers.
+        self._connect_lock = asyncio.Lock()
 
     async def __aenter__(self) -> ThreatLockerClient:
         await self.connect()
@@ -47,17 +80,20 @@ class ThreatLockerClient:
         await self.close()
 
     async def connect(self) -> None:
-        if self._client is None:
-            self._client = httpx.AsyncClient(
-                base_url=self._config.base_url,
-                timeout=self._config.timeout,
-                headers={
-                    "Authorization": self._config.api_key,
-                    "Accept": "application/json",
-                    "Content-Type": "application/json",
-                    "User-Agent": "threatlocker-mcp/0.1.0",
-                },
-            )
+        async with self._connect_lock:
+            if self._client is None:
+                # ThreatLocker uses a bare API key as the Authorization value
+                # (no "Bearer " scheme prefix) -- intentional, do not change.
+                self._client = httpx.AsyncClient(
+                    base_url=self._config.base_url,
+                    timeout=self._config.timeout,
+                    headers={
+                        "Authorization": self._config.api_key,
+                        "Accept": "application/json",
+                        "Content-Type": "application/json",
+                        "User-Agent": "threatlocker-mcp/0.1.0",
+                    },
+                )
 
     async def close(self) -> None:
         if self._client is not None:
@@ -99,18 +135,21 @@ class ThreatLockerClient:
             "%s %s params=%s org=%s", method, path, params, headers.get("ManagedOrganizationId")
         )
 
+        # Next sleep duration is set by the previous iteration when it decides to
+        # retry — driven by Retry-After if present, else exponential backoff + jitter.
+        next_backoff: float | None = None
         for attempt in range(_MAX_RETRIES):
-            if attempt:
-                backoff = 2 ** (attempt - 1)  # 1 s, 2 s
+            if next_backoff is not None:
                 logger.warning(
-                    "Retry %d/%d for %s %s — backing off %.0fs",
+                    "Retry %d/%d for %s %s — backing off %.2fs",
                     attempt,
                     _MAX_RETRIES - 1,
                     method,
                     path,
-                    backoff,
+                    next_backoff,
                 )
-                await asyncio.sleep(backoff)
+                await asyncio.sleep(next_backoff)
+                next_backoff = None
 
             try:
                 response = await self._client.request(
@@ -124,6 +163,9 @@ class ThreatLockerClient:
                 if attempt == _MAX_RETRIES - 1:
                     raise ThreatLockerAPIError(0, f"Network error: {e}") from e
                 logger.warning("Network error on attempt %d: %s", attempt + 1, e)
+                # Exponential backoff with full jitter (AWS-style): pick uniformly
+                # from [0, base * 2^attempt] to spread out concurrent retriers.
+                next_backoff = random.uniform(0, 2**attempt)
                 continue
 
             # Retry on transient server-side errors unless this is the last attempt.
@@ -131,6 +173,11 @@ class ThreatLockerClient:
                 logger.warning(
                     "HTTP %d on attempt %d — will retry", response.status_code, attempt + 1
                 )
+                retry_after = _parse_retry_after(response.headers.get("retry-after"))
+                if retry_after is not None:
+                    next_backoff = min(retry_after, _MAX_RETRY_AFTER_SECONDS)
+                else:
+                    next_backoff = random.uniform(0, 2**attempt)
                 continue
 
             if response.status_code >= 400:

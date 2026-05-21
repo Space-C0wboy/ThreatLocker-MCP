@@ -10,6 +10,7 @@ from . import (
     computer_group,
     maintenance_mode,
     online_devices,
+    organization,
     policy,
     report,
     system_audit,
@@ -24,6 +25,7 @@ def register_all(mcp: FastMCP) -> None:
     computer_group.register(mcp)
     maintenance_mode.register(mcp)
     online_devices.register(mcp)
+    organization.register(mcp)
     policy.register(mcp)
     report.register(mcp)
     system_audit.register(mcp)

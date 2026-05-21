@@ -263,6 +263,106 @@ async def test_approval_request_tool_camel_case(httpx_mock, monkeypatch, config)
 
 
 # ---------------------------------------------------------------------------
+# Retry-After header handling
+# ---------------------------------------------------------------------------
+
+
+def test_parse_retry_after_seconds():
+    from threatlocker_mcp.client import _parse_retry_after
+
+    assert _parse_retry_after("5") == 5.0
+    assert _parse_retry_after("  2.5 ") == 2.5
+    assert _parse_retry_after("0") == 0.0
+    # Negative values are clamped to 0
+    assert _parse_retry_after("-3") == 0.0
+
+
+def test_parse_retry_after_invalid_returns_none():
+    from threatlocker_mcp.client import _parse_retry_after
+
+    assert _parse_retry_after(None) is None
+    assert _parse_retry_after("") is None
+    assert _parse_retry_after("not-a-date") is None
+
+
+def test_parse_retry_after_http_date():
+    """HTTP-date format should resolve to a non-negative delta from now."""
+    from datetime import datetime, timedelta, timezone
+    from email.utils import format_datetime
+
+    from threatlocker_mcp.client import _parse_retry_after
+
+    future = datetime.now(timezone.utc) + timedelta(seconds=10)
+    value = _parse_retry_after(format_datetime(future))
+    assert value is not None
+    # Should be close to 10s; allow generous slack for clock skew during test.
+    assert 0 <= value <= 15
+
+
+async def test_retries_honor_retry_after_seconds(httpx_mock, config, monkeypatch):
+    """A 429 with Retry-After: 0 should retry quickly using the header value."""
+    httpx_mock.add_response(
+        method="GET",
+        url="https://api.example.test/portalApi/Computer",
+        status_code=429,
+        headers={"Retry-After": "0"},
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://api.example.test/portalApi/Computer",
+        json=[{"id": "ok"}],
+    )
+
+    sleeps: list[float] = []
+
+    async def fake_sleep(d):
+        sleeps.append(d)
+
+    monkeypatch.setattr("threatlocker_mcp.client.asyncio.sleep", fake_sleep)
+
+    async with ThreatLockerClient(config) as c:
+        result = await c.get("/portalApi/Computer")
+    assert result == [{"id": "ok"}]
+    # Retry-After: 0 should produce a single sleep of 0 seconds (not the jitter).
+    assert sleeps == [0.0]
+
+
+# ---------------------------------------------------------------------------
+# list_organizations tool
+# ---------------------------------------------------------------------------
+
+
+async def test_list_organizations_tool_registers_and_calls(httpx_mock, monkeypatch, config):
+    """The Organization endpoint surfaces under the friendlier `list_organizations` name."""
+    from threatlocker_mcp import client as client_module
+
+    test_client = ThreatLockerClient(config)
+    await test_client.connect()
+    monkeypatch.setattr(client_module, "_client", test_client)
+
+    httpx_mock.add_response(
+        method="GET",
+        url="https://api.example.test/portalapi/Organization/OrganizationGetForMoveComputers?searchText=acme",
+        json=[{"organizationId": "abc", "displayName": "Acme"}],
+    )
+
+    from fastmcp import FastMCP
+
+    from threatlocker_mcp.tools.organization import register
+
+    mcp = FastMCP("test")
+    register(mcp)
+    tool = await mcp.get_tool("list_organizations")
+    assert tool is not None
+    await tool.run({"search_text": "acme"})
+
+    request = httpx_mock.get_request()
+    assert "searchText=acme" in str(request.url)
+
+    await test_client.close()
+
+
+# ---------------------------------------------------------------------------
 # Config validation
 # ---------------------------------------------------------------------------
 

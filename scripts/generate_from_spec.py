@@ -65,6 +65,13 @@ DESCRIPTION_OVERRIDES: dict[tuple[str, str], str] = {
         " `computerGroupId` and set only the `include_*` flags you actually need;"
         " unscoped calls may exceed downstream output limits."
     ),
+    ("/portalapi/Organization/OrganizationGetForMoveComputers", "get"): (
+        " Returns the organizations the current API key can target. Use this FIRST to"
+        " discover org GUIDs to pass as `organization_id` to other tools. Despite the"
+        " path name (the endpoint also feeds the portal's 'move computers' org"
+        " picker), the result is the canonical list of accessible orgs for this key."
+        " `searchText` filters by display name; pass an empty string for the full list."
+    ),
     ("/portalapi/ApprovalRequest/ApprovalRequestPermitApplication", "post"): (
         " NOTE: workflow is take_ownership -> get_permit_application_by_id ->"
         " application_get_matching_list -> permit_application. Start from the"
@@ -140,6 +147,15 @@ PROPERTY_NAME_OVERRIDES: dict[str, dict[str, str]] = {
     },
 }
 
+# Override the auto-derived tool name for specific endpoints. Use this when the
+# endpoint's path-derived name is awkward for LLM callers (e.g. an org-listing
+# endpoint nominally scoped to a "move computers" UI is better surfaced as the
+# generic `list_organizations`). The override only affects the MCP tool name and
+# the Python function name; the underlying path/method is unchanged.
+TOOL_NAME_OVERRIDES: dict[tuple[str, str], str] = {
+    ("/portalapi/Organization/OrganizationGetForMoveComputers", "get"): "list_organizations",
+}
+
 
 # Endpoints that need the full DTO serialized -- including explicit `null` fields --
 # rather than the default `exclude_none=True` behavior. Most ThreatLocker endpoints
@@ -200,6 +216,8 @@ CHOSEN_ENDPOINTS: list[tuple[str, str]] = [
     ("/portalapi/OnlineDevices/OnlineDevicesGetByParameters", "get"),
     # Report (1)
     ("/portalapi/Report/ReportGetByOrganizationId", "get"),
+    # Organization (1) — list-orgs surfaced as `list_organizations` via TOOL_NAME_OVERRIDES
+    ("/portalapi/Organization/OrganizationGetForMoveComputers", "get"),
 ]
 
 
@@ -242,7 +260,11 @@ def safe_name(name: str) -> str:
 
 def operation_id_to_func(path: str, method: str) -> str:
     """Turn '/portalapi/Computer/ComputerGetByAllParameters' POST into
-    'computer_get_by_all_parameters'."""
+    'computer_get_by_all_parameters'. Honors TOOL_NAME_OVERRIDES for endpoints
+    that should be surfaced under a different LLM-facing name."""
+    override = TOOL_NAME_OVERRIDES.get((path, method))
+    if override:
+        return override
     tail = path.rsplit("/", 1)[-1]
     return snake(tail)
 
@@ -322,8 +344,15 @@ def py_type_for_schema(schema: dict, models_in_scope: set[str]) -> str:
         return py_type_for_schema(schema["allOf"][0], models_in_scope)
 
     if "oneOf" in schema or "anyOf" in schema:
-        # Take the first option; this API doesn't really use unions meaningfully
+        # Take the first option; this API doesn't really use unions meaningfully.
+        # Emit a stderr warning so future spec changes that add real unions don't
+        # silently lose type info.
         opts = schema.get("oneOf") or schema.get("anyOf")
+        if opts and len(opts) > 1:
+            print(
+                f"WARNING: collapsing oneOf/anyOf with {len(opts)} options to first option",
+                file=sys.stderr,
+            )
         if opts:
             return py_type_for_schema(opts[0], models_in_scope)
         return "Any"
@@ -682,7 +711,7 @@ def main() -> int:
         return 2
 
     spec_path = Path(sys.argv[1])
-    spec = json.loads(spec_path.read_text())
+    spec = json.loads(spec_path.read_text(encoding="utf-8"))
 
     # Walk chosen ops to find which schemas we need
     schema_seed: list[str] = []
@@ -714,9 +743,11 @@ def main() -> int:
     tools_dir = pkg_dir / "tools"
     tools_dir.mkdir(exist_ok=True)
 
-    # Clear out old tool modules (everything but __init__.py)
+    # Clear out old tool modules (everything but __init__.py). Log each unlink so
+    # a developer who dropped a hand-edited file in tools/ sees it disappear.
     for f in tools_dir.glob("*.py"):
         if f.name != "__init__.py":
+            print(f"Removing stale tool module {f.name}", file=sys.stderr)
             f.unlink()
 
     tag_modules: list[str] = []
