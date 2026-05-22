@@ -4,6 +4,12 @@
 # Claude Code per-user state
 .claude/
 
+# Superpowers (brainstorming / spec / plan) artifacts — dev process only
+docs/superpowers/
+
+# Endpoint-probing scratch scripts (each hardcodes a developer's machine paths)
+scripts/probe_*.py
+
 # Python
 __pycache__/
 *.py[cod]
@@ -16,6 +22,10 @@ dist/
 .venv/
 venv/
 env/
+
+# Test / lint caches
+.pytest_cache/
+.ruff_cache/
 
 # Environment
 .env

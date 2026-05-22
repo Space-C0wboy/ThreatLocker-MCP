@@ -34,12 +34,11 @@ An [MCP](https://modelcontextprotocol.io/) server that exposes the [ThreatLocker
 - [Configuration](#configuration)
 - [Multi-Organization Usage](#multi-organization-usage)
 - [Example Prompts](#example-prompts)
-- [Local Development](#local-development)
-- [Regenerating from Spec](#regenerating-from-spec)
-- [Project Layout](#project-layout)
 - [Security Notes](#security-notes)
 - [Known API Limitations](#known-api-limitations)
+- [Known API Quirks](#known-api-quirks)
 - [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
 
 ---
 
@@ -181,104 +180,6 @@ Every tool accepts two optional parameters for targeting specific organizations 
 
 ---
 
-## Local Development
-
-```bash
-git clone https://github.com/Space-C0wboy/ThreatLocker-MCP
-cd ThreatLocker-MCP
-
-# Install dependencies (uv recommended)
-uv sync --extra dev
-
-# Or with pip
-pip install -e ".[dev]"
-
-# Set up environment
-cp .env.example .env   # then fill in your values
-
-# Run the test suite (24 tests, all mocked — no live API calls)
-pytest
-
-# Verify the CLI
-threatlocker-mcp --help
-```
-
-**Running with HTTP transport** instead of stdio:
-
-```bash
-threatlocker-mcp --transport http --port 8765
-```
-
-**Linting and formatting:**
-
-```bash
-ruff check .
-ruff format .
-```
-
----
-
-## Regenerating from Spec
-
-When ThreatLocker updates their API, pull the latest spec and re-run the code generator:
-
-```bash
-curl https://portalapi.h.threatlocker.com/swagger/public/swagger.json -o spec.json
-python scripts/generate_from_spec.py spec.json
-```
-
-This overwrites `src/threatlocker_mcp/models.py` and all tool modules under `src/threatlocker_mcp/tools/`. The generator is idempotent — running it multiple times produces the same output.
-
-To add or remove tools from the curated set, edit the `CHOSEN_ENDPOINTS` list at the top of `scripts/generate_from_spec.py` and regenerate.
-
-The generator exposes five override tables for spec-vs-reality quirks, all near the top of the script:
-
-| Override | When to use |
-|----------|-------------|
-| `DESCRIPTION_OVERRIDES` | Append guidance to a tool's description — e.g. document a field the spec marks optional but the server actually requires. |
-| `REQUIRED_PARAM_OVERRIDES` | Promote a swagger-optional query/header param to a required argument so callers fail loudly instead of getting an opaque 417. |
-| `TOOL_NAME_OVERRIDES` | Rename the LLM-facing tool name (the underlying path/method is unchanged). This is how `OrganizationGetForMoveComputers` is surfaced as `list_organizations`. |
-| `PROPERTY_NAME_OVERRIDES` | Map mis-cased spec property names to their canonical live-API form so the on-the-wire JSON matches what the server expects. |
-| `SEND_FULL_BODY_OVERRIDES` | Force `model_dump(exclude_none=False)` on endpoints that distinguish missing fields from `null`. |
-
-After editing the generator or its overrides, run `ruff format .` to normalize the regenerated files before committing.
-
----
-
-## Project Layout
-
-```
-ThreatLocker-MCP/
-├── pyproject.toml
-├── README.md
-├── LICENSE
-├── .env.example
-├── spec.json                        # OpenAPI snapshot — input to codegen
-├── scripts/
-│   └── generate_from_spec.py        # Generates models.py and tool modules
-├── src/threatlocker_mcp/
-│   ├── config.py                    # Environment variable loading and validation
-│   ├── client.py                    # Async httpx client with auth, org headers, and retry logic
-│   ├── server.py                    # FastMCP server entrypoint (stdio + HTTP transports)
-│   ├── models.py                    # GENERATED — Pydantic request/response models
-│   └── tools/                       # GENERATED — one module per ThreatLocker API tag
-│       ├── action_log.py
-│       ├── application.py
-│       ├── approval_request.py
-│       ├── computer.py
-│       ├── computer_group.py
-│       ├── maintenance_mode.py
-│       ├── online_devices.py
-│       ├── organization.py
-│       ├── policy.py
-│       ├── report.py
-│       └── system_audit.py
-└── tests/
-    └── test_client.py               # 24 tests; all mocked, no live API calls required
-```
-
----
-
 ## Security Notes
 
 - **API key handling:** Keys are read from environment variables only and are never written to logs.
@@ -300,16 +201,13 @@ The following are gaps in ThreatLocker's public API, not limitations of this ser
 
 ---
 
-## Known API quirks
+## Known API Quirks
 
-These are server-side oddities worth knowing when an LLM is driving the tools:
+A few server-side behaviors worth knowing about. Detailed body-shape guidance lives inside each tool's description and is delivered to the AI assistant automatically — the items below are the ones you might notice from the outside.
 
-- **`action_log_get_by_parameters_v2` needs *both* date-range encodings.** The OpenAPI schema lists `dateTime` (an array of two ISO 8601 strings) *and* `startDate`/`endDate` as separate fields. In practice the API rejects requests that supply only one — supply the same window in **both** forms. Example: `{"sourceTableId": 1, "dateTime": ["2026-05-19T00:00:00Z","2026-05-20T23:59:59Z"], "startDate": "2026-05-19T00:00:00Z", "endDate": "2026-05-20T23:59:59Z", "pageSize": 25, "pageNumber": 1}`.
-- **`approval_request_get_by_parameters` needs `statusId`.** Without it the server returns HTTP 500. Use `statusId=1` for pending requests.
-- **`approval_request_permit_application` is shape-sensitive in ways the spec doesn't document.** The full quirks live in the tool's description (which the LLM sees), but the short version: (1) `approvalRequest.json` must be copied verbatim from `approval_request_get_permit_application_by_id`; (2) `userinstance` is the portal shard (`"h"`, `"g"`, etc.); (3) for "this computer" scope all three `policyLevel` flags stay false — setting `toComputer: true` returns HTTP 417; (4) when the chosen `matchingApplication` is a BUILT-IN (`organizationName: "master"`) you must set `toEntireOrganization: true`, otherwise the server returns the misleading HTTP 401 `"Missing the '' permission"` even when the API user has the right roles.
-- **HTTP 401 `"Missing the '' permission"` (empty interpolation) is usually about body shape, not permissions.** ThreatLocker uses one error template for several permission-lookup paths; when the server can't dynamically resolve which permission the request requires (e.g. BUILT-IN-app vs computer-scope mismatch above), the placeholder ends up empty. Check the request body before re-granting roles.
-- **Empty responses surface as `{"_empty_response": true, "_status_code": 200}`.** Several ThreatLocker endpoints reply with HTTP 200 + either an empty body or the JSON literal `null` when there are no matching rows — the client converts both to this sentinel object so it isn't silently dropped.
-- **Transient errors are retried up to 3 times.** The client retries `429`, `500`, `502`, `503`, `504`, and network errors. When the server sends a `Retry-After` header (either delta-seconds or HTTP-date), it's honored and capped at 60s; otherwise backoff is exponential with AWS-style full jitter so concurrent retriers don't herd. `4xx` other than `429` are surfaced immediately without retry.
+- **Empty responses surface as `{"_empty_response": true, "_status_code": 200}`.** Several ThreatLocker endpoints reply with HTTP 200 + an empty body (or the JSON literal `null`) when there are no matching rows. The client converts both to this sentinel so the response isn't silently dropped.
+- **HTTP 401 `"Missing the '' permission"` (empty interpolation) usually means a request-body shape problem, not a permissions problem.** ThreatLocker reuses one error template across several permission-lookup paths; when the server can't resolve which permission was needed, the placeholder ends up empty. Check the request body before re-granting roles.
+- **Transient errors are retried up to 3 times.** The client retries HTTP `429`, `500`, `502`, `503`, `504`, and network errors. When the server sends a `Retry-After` header (delta-seconds or HTTP-date) the client honors it (capped at 60s); otherwise it backs off exponentially with full jitter. `4xx` responses other than `429` are surfaced immediately without retry.
 
 ## Troubleshooting
 
@@ -357,6 +255,32 @@ Expected behaviour. `uvx` is cloning the repository and building the dependency 
 **Claude still runs the old version after an update**
 
 `uvx` caches by commit hash. Add `"--refresh"` as the first item in `args` to force a re-fetch, or pin an explicit version tag (e.g. `@v0.2.0`) so updates require a deliberate change.
+
+---
+
+## Contributing
+
+The tool wrappers and Pydantic models under `src/threatlocker_mcp/tools/` and `src/threatlocker_mcp/models.py` are generated from `spec.json` by `scripts/generate_from_spec.py`. To make changes:
+
+```bash
+git clone https://github.com/Space-C0wboy/ThreatLocker-MCP
+cd ThreatLocker-MCP
+uv sync --extra dev          # or: pip install -e ".[dev]"
+cp .env.example .env         # then fill in your credentials
+
+# Update the spec snapshot if needed, then regenerate
+curl https://portalapi.h.threatlocker.com/swagger/public/swagger.json -o spec.json
+python scripts/generate_from_spec.py spec.json
+ruff format .
+
+# Verify
+ruff check .
+pytest                       # 24 mocked tests, no live API calls
+```
+
+The curated tool surface and per-endpoint overrides (description text, required-param promotions, name overrides) all live near the top of `scripts/generate_from_spec.py`.
+
+Bug reports and pull requests are welcome via the [issue tracker](https://github.com/Space-C0wboy/ThreatLocker-MCP/issues). For security issues, please contact the maintainer directly rather than filing a public issue.
 
 ---
 
