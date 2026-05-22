@@ -207,6 +207,17 @@ DESCRIPTION_OVERRIDES: dict[tuple[str, str], str] = {
         " (empty interpolation), suspect body-shape rather than permissions"
         " -- same root cause as the application-permit flow."
     ),
+    ("/portalapi/Tag/TagUpdate", "post"): (
+        " Updates an existing tag. `tagId` (spec-nullable) must be a valid"
+        " existing tag GUID; passing an empty or omitted `tagId` may cause"
+        " the server to interpret the request as a new-tag creation. Use"
+        " `tag_get_dropdown_options_by_organization_id` to discover existing"
+        " tag GUIDs first. `tagType` enum (verify against tenant): 1=Computer"
+        " tag, 2=Application tag, 3=Network tag. Sending one of"
+        " `tagItemsText` / `tagItemsIPv4` / `tagItemsIPv6` replaces (not"
+        " merges) that list for the tag. NOT YET LIVE-TESTED -- verify"
+        " behaviour against the dev tenant before relying on it."
+    ),
 }
 
 # Query/header params the API actually requires but that the spec marks optional.
