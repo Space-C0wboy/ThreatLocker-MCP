@@ -238,6 +238,12 @@ PROPERTY_NAME_OVERRIDES: dict[str, dict[str, str]] = {
 # the Python function name; the underlying path/method is unchanged.
 TOOL_NAME_OVERRIDES: dict[tuple[str, str], str] = {
     ("/portalapi/Organization/OrganizationGetForMoveComputers", "get"): "list_organizations",
+    # The spec path has a typo ("Downdown" instead of "Dropdown"). Mask it from
+    # the LLM-facing tool name; the underlying path is unchanged.
+    (
+        "/portalapi/Tag/TagGetDowndownOptionsByOrganizationId",
+        "get",
+    ): "tag_get_dropdown_options_by_organization_id",
 }
 
 
