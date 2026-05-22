@@ -1,110 +1,26 @@
 # ThreatLocker MCP
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+[![PyPI version](https://badge.fury.io/py/threatlocker-mcp.svg)](https://pypi.org/project/threatlocker-mcp/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/threatlocker-mcp)](https://pypi.org/project/threatlocker-mcp/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![CI](https://github.com/Space-C0wboy/ThreatLocker-MCP/actions/workflows/ci.yml/badge.svg)](https://github.com/Space-C0wboy/ThreatLocker-MCP/actions/workflows/ci.yml)
 
-An [MCP](https://modelcontextprotocol.io/) server that exposes the [ThreatLocker Portal API](https://portalapi.h.threatlocker.com/swagger/index.html) as callable tools for AI assistants such as Claude Desktop and Claude Code.
+**threatlocker-mcp** is a [Model Context Protocol](https://modelcontextprotocol.io/) server that connects AI assistants such as Claude Desktop and Claude Code with the [ThreatLocker Portal API](https://portalapi.h.threatlocker.com/swagger/index.html). 44 tools — generated directly from the official OpenAPI 3.0 spec — give your AI assistant programmatic access to computers, approvals, action logs, tags, maintenance mode, reports, and more, across single-org and parent/child tenant setups.
 
-44 tools are generated directly from the official OpenAPI 3.0 spec, with fully-typed Pydantic request bodies, stdio and HTTP transports, and per-call organization override for parent/child tenant setups.
-
-*This is an independent, community-maintained project and is not affiliated with, endorsed by, or sponsored by ThreatLocker, Inc. "ThreatLocker" is a trademark of ThreatLocker, Inc.*
-
----
+> [!IMPORTANT]
+> **Unofficial project.** This is an independent, community-built MCP server developed against ThreatLocker's published API documentation. It is **not** an official ThreatLocker product and is not affiliated with, endorsed by, or supported by ThreatLocker, Inc. "ThreatLocker" is a trademark of ThreatLocker, Inc. For official support of the ThreatLocker platform itself, contact ThreatLocker directly.
 
 > [!WARNING]
 > **This server can perform destructive actions against your ThreatLocker environment.**
 >
-> - Tools can enable/disable endpoint protection, approve or deny security requests, modify tag membership, end active maintenance windows, approve storage devices, and move computers between organizations. A hallucinated tool argument from your AI assistant could alter your ThreatLocker configuration in ways that affect endpoint security.
-> - There are **no built-in rate-limit protections or confirmation prompts** beyond what ThreatLocker itself records.
+> Tools can enable/disable endpoint protection, approve security requests, modify tag membership, end active maintenance windows, approve storage devices, and move computers between organizations. A hallucinated tool argument from your AI assistant could alter your ThreatLocker configuration in ways that affect endpoint security.
 >
 > **Recommended posture:**
-> - Try the server against a non-production or lab tenant before granting it access to a live environment.
+> - Try the server against a non-production or lab tenant first.
 > - Use a ThreatLocker API key scoped to the **minimum permissions** your use case requires.
 > - Review every destructive tool call before allowing execution. Claude Desktop requires tool-call approval by default — keep that enabled.
 > - Treat the API key with the same care as portal admin credentials, because functionally it is one.
->
-> Found a bug? [Open an issue](https://github.com/Space-C0wboy/ThreatLocker-MCP/issues). Found a security bug? Contact the maintainer directly rather than filing a public issue.
-
----
-
-## Table of Contents
-
-- [Quick Start](#quick-start)
-- [Tools](#tools)
-- [Configuration](#configuration)
-- [Multi-Organization Usage](#multi-organization-usage)
-- [Example Prompts](#example-prompts)
-- [Security Notes](#security-notes)
-- [License](#license)
-
----
-
-## Quick Start
-
-The recommended installation method uses [`uvx`](https://docs.astral.sh/uv/), which handles dependency isolation automatically with no manual virtual environment setup.
-
-### Prerequisites
-
-**Git** — required by `uvx` to clone the repository.
-
-| Platform | Install command |
-|----------|----------------|
-| Windows | `winget install --id Git.Git -e --source winget` |
-| macOS | `brew install git` (or Xcode Command Line Tools) |
-| Linux | `apt install git` / `dnf install git` |
-
-Verify with `git --version` in a fresh terminal after installation.
-
-**uv** — provides the `uvx` runner.
-
-```bash
-# macOS / Linux
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Windows (PowerShell)
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-```
-
-Reopen your terminal after installing so `PATH` is refreshed.
-
-### Configure Claude Desktop
-
-Add the following block to your Claude Desktop configuration file:
-
-- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
-- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
-
-```json
-{
-  "mcpServers": {
-    "threatlocker": {
-      "command": "uvx",
-      "args": [
-        "--from",
-        "git+https://github.com/Space-C0wboy/ThreatLocker-MCP",
-        "threatlocker-mcp"
-      ],
-      "env": {
-        "THREATLOCKER_API_KEY": "your-api-key",
-        "THREATLOCKER_ORG_ID": "your-default-org-guid",
-        "THREATLOCKER_BASE_URL": "https://portalapi.h.threatlocker.com",
-        "PATHEXT": ".COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC;.PY;.PYW"
-      }
-    }
-  }
-}
-```
-
-> **Windows note:** The `PATHEXT` entry is required. Claude Desktop does not pass `PATHEXT` to child processes, which prevents `uv` from locating `git.exe` even when Git is installed. The symptom is a `Git executable not found` error in the log. Non-Windows users can omit that line.
-
-Fully quit Claude Desktop (tray icon → **Quit** on Windows; **⌘Q** on macOS), then reopen it. The first launch takes 30–60 seconds while `uvx` clones the repository and installs dependencies. Subsequent launches are nearly instant due to caching. You should see 44 ThreatLocker tools listed in the tools menu.
-
-**Pinning a version:** Once a release is tagged, replace the URL with `git+https://github.com/Space-C0wboy/ThreatLocker-MCP@v0.1.0` to lock to a specific version.
-
-**Forcing a refresh:** Add `"--refresh"` as the first item in `args` to force `uvx` to re-fetch after an update has been pushed.
-
----
+> - The HTTP transport binds to `127.0.0.1` by default. Do not expose it to the public internet without adding authentication.
 
 ## Tools
 
@@ -125,11 +41,31 @@ Fully quit Claude Desktop (tray icon → **Quit** on Windows; **⌘Q** on macOS)
 
 All request bodies are typed Pydantic models (63 generated from the spec), so the AI assistant receives full schema validation and autocomplete. The wire format preserves the original camelCase field names expected by the API.
 
----
+## Quick Start
 
-## Configuration
+### Install
 
-Set the following environment variables, either in your shell or in a `.env` file in the project root (see `.env.example`).
+#### Using uv (recommended)
+
+```bash
+uv tool install threatlocker-mcp
+```
+
+#### Using pip
+
+```bash
+pip install threatlocker-mcp
+```
+
+### Configure
+
+Set the required environment variables (or place them in a `.env` file in the directory where you launch the server):
+
+```bash
+export THREATLOCKER_API_KEY="your-api-key"
+export THREATLOCKER_ORG_ID="your-default-org-guid"
+export THREATLOCKER_BASE_URL="https://portalapi.h.threatlocker.com"
+```
 
 | Variable | Required | Default | Description |
 |----------|:--------:|---------|-------------|
@@ -141,7 +77,69 @@ Set the following environment variables, either in your shell or in a `.env` fil
 | `MCP_HTTP_HOST` | — | `127.0.0.1` | Bind host for the HTTP transport |
 | `MCP_HTTP_PORT` | — | `8765` | Bind port for the HTTP transport |
 
----
+### Run
+
+```bash
+threatlocker-mcp
+```
+
+By default the server runs in **stdio** mode (the transport MCP clients like Claude Desktop expect). For HTTP transport:
+
+```bash
+threatlocker-mcp --transport http --port 8765
+```
+
+## Editor Integration
+
+### Claude Desktop with `uvx` (recommended)
+
+Add the following block to your Claude Desktop configuration file:
+
+- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "threatlocker": {
+      "command": "uvx",
+      "args": [
+        "threatlocker-mcp"
+      ],
+      "env": {
+        "THREATLOCKER_API_KEY": "your-api-key",
+        "THREATLOCKER_ORG_ID": "your-default-org-guid",
+        "THREATLOCKER_BASE_URL": "https://portalapi.h.threatlocker.com"
+      }
+    }
+  }
+}
+```
+
+Fully quit Claude Desktop (tray icon → **Quit** on Windows; **⌘Q** on macOS), then reopen it. `uvx` resolves and caches the package on first launch; subsequent launches are nearly instant.
+
+#### Pinning to a specific version
+
+```json
+"args": ["threatlocker-mcp@1.0.0"]
+```
+
+#### Forcing a refresh
+
+```json
+"args": ["--refresh", "threatlocker-mcp"]
+```
+
+#### Windows: `PATHEXT` may be required
+
+Claude Desktop does not always pass `PATHEXT` to child processes, which can prevent `uv` from locating helper executables. If the server fails to start with a `not found` style error, add:
+
+```json
+"env": {
+  "PATHEXT": ".COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC;.PY;.PYW",
+  "THREATLOCKER_API_KEY": "..."
+}
+```
 
 ## Multi-Organization Usage
 
@@ -150,9 +148,7 @@ Every tool accepts two optional parameters for targeting specific organizations 
 - **`organization_id`** — overrides the `ManagedOrganizationId` request header. When omitted, `THREATLOCKER_ORG_ID` is used.
 - **`override_organization_id`** — sets the `OverrideManagedOrganizationId` header for scenarios that require both headers simultaneously.
 
-> **Finding child org GUIDs:** Call `list_organizations` first — optionally with `search_text` to filter by display name — to enumerate every org this API key can target. (Under the hood this hits `/portalapi/Organization/OrganizationGetForMoveComputers`, the same endpoint the portal uses to populate its move-computer org picker.) Org GUIDs can also be read from the portal URL while switched into each child org.
-
----
+> **Finding child org GUIDs:** Call `list_organizations` first — optionally with `search_text` to filter by display name — to enumerate every org this API key can target. Org GUIDs can also be read from the portal URL while switched into each child org.
 
 ## Example Prompts
 
@@ -176,17 +172,11 @@ Every tool accepts two optional parameters for targeting specific organizations 
 
 → Calls `maintenance_mode_insert` with a `MaintenanceModeInsertDto`.
 
----
+**Manage tags:**
+> "Add `corporate-vpn.example.com` to the existing 'Corporate VPN' network tag."
 
-## Security Notes
-
-- **API key handling:** Keys are read from environment variables only and are never written to logs.
-- **HTTP transport:** Binds to `127.0.0.1` by default. Do not expose it to the public internet without adding authentication — FastMCP supports OAuth for this purpose.
-- **Destructive operations:** This server can enable or disable endpoint protection, approve or deny security requests, and move computers between organizations. The API key should be treated with the same care as portal admin credentials.
-- **Error message exposure:** ThreatLocker API error responses are surfaced verbatim in tool outputs. This aids debugging but means your AI assistant will see raw API response bodies.
-
----
+→ Calls `tag_get_dropdown_options_by_organization_id` and `tag_update`.
 
 ## License
 
-[MIT](LICENSE)
+MIT — see [LICENSE](LICENSE).
