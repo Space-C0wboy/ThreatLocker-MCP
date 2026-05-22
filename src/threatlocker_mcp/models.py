@@ -296,6 +296,17 @@ class ApplicationFileDto(BaseModel):
     organization_id: str | None = Field(default=None, alias="organizationId")
 
 
+class ApplicationGetForApplicationOptionsDto(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    organization_id: str | None = Field(default=None, alias="organizationId")
+    os_type: int = Field(default=1, alias="osType")
+    include_built_in: bool = Field(default=False, alias="includeBuiltIn")
+    search_text: str | None = Field(default=None, alias="searchText")
+    host_name: str | None = Field(default=None, alias="hostName")
+    applies_to_id: str | None = Field(default=None, alias="appliesToId")
+    only_permitted: bool = Field(default=False, alias="onlyPermitted")
+
+
 class ThreatLockerCertDto(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="allow")
     sha: str | None = Field(default=None)
@@ -928,6 +939,7 @@ RegistryPolicy.model_rebuild()
 AssociatedApplicationPolicy.model_rebuild()
 AdvRFPolicy.model_rebuild()
 ApplicationFileDto.model_rebuild()
+ApplicationGetForApplicationOptionsDto.model_rebuild()
 ThreatLockerCertDto.model_rebuild()
 ApplicationMatchParameterDto.model_rebuild()
 ApplicationOnlineDto.model_rebuild()

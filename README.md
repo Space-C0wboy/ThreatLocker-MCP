@@ -6,7 +6,7 @@
 
 An [MCP](https://modelcontextprotocol.io/) server that exposes the [ThreatLocker Portal API](https://portalapi.h.threatlocker.com/swagger/index.html) as callable tools for AI assistants such as Claude Desktop and Claude Code.
 
-33 tools are generated directly from the official OpenAPI 3.0 spec, with fully-typed Pydantic request bodies, stdio and HTTP transports, and per-call organization override for parent/child tenant setups.
+36 tools are generated directly from the official OpenAPI 3.0 spec, with fully-typed Pydantic request bodies, stdio and HTTP transports, and per-call organization override for parent/child tenant setups.
 
 ---
 
@@ -101,7 +101,7 @@ Add the following block to your Claude Desktop configuration file:
 
 > **Windows note:** The `PATHEXT` entry is required. Claude Desktop does not pass `PATHEXT` to child processes, which prevents `uv` from locating `git.exe` even when Git is installed. The symptom is a `Git executable not found` error in the log. Non-Windows users can omit that line.
 
-Fully quit Claude Desktop (tray icon → **Quit** on Windows; **⌘Q** on macOS), then reopen it. The first launch takes 30–60 seconds while `uvx` clones the repository and installs dependencies. Subsequent launches are nearly instant due to caching. You should see 33 ThreatLocker tools listed in the tools menu.
+Fully quit Claude Desktop (tray icon → **Quit** on Windows; **⌘Q** on macOS), then reopen it. The first launch takes 30–60 seconds while `uvx` clones the repository and installs dependencies. Subsequent launches are nearly instant due to caching. You should see 36 ThreatLocker tools listed in the tools menu.
 
 **Pinning a version:** Once a release is tagged, replace the URL with `git+https://github.com/Space-C0wboy/ThreatLocker-MCP@v0.1.0` to lock to a specific version.
 
@@ -115,11 +115,11 @@ Fully quit Claude Desktop (tray icon → **Quit** on Windows; **⌘Q** on macOS)
 |------|:-----:|--------------|
 | **Computers** | 8 | Search, get/edit details, enable/disable protection, update maintenance mode, baseline rescan, move between orgs |
 | **Approval Requests** | 8 | Search, get by ID, count pending, get permit details, approve, reject, ignore, take ownership |
+| **Application** | 5 | Get by ID, get matching list, list available apps for permit-into, list apps for maintenance mode, research details |
 | **Action Log** | 4 | Search by parameters, get by ID, file history, file download details |
 | **Maintenance Mode** | 3 | Get schedule by computer, insert, end by ID |
 | **System Audit** | 2 | Search by parameters, health center |
 | **Computer Groups** | 2 | Get groups with computers, dropdown by org |
-| **Application** | 2 | Get by ID, get matching list |
 | **Policy** | 1 | Get by ID |
 | **Online Devices** | 1 | Get by parameters |
 | **Reports** | 1 | Get by organization |
@@ -195,7 +195,7 @@ pip install -e ".[dev]"
 # Set up environment
 cp .env.example .env   # then fill in your values
 
-# Run the test suite (22 tests, all mocked — no live API calls)
+# Run the test suite (24 tests, all mocked — no live API calls)
 pytest
 
 # Verify the CLI
@@ -273,7 +273,7 @@ ThreatLocker-MCP/
 │       ├── report.py
 │       └── system_audit.py
 └── tests/
-    └── test_client.py               # 22 tests; all mocked, no live API calls required
+    └── test_client.py               # 24 tests; all mocked, no live API calls required
 ```
 
 ---
@@ -305,6 +305,8 @@ These are server-side oddities worth knowing when an LLM is driving the tools:
 
 - **`action_log_get_by_parameters_v2` needs *both* date-range encodings.** The OpenAPI schema lists `dateTime` (an array of two ISO 8601 strings) *and* `startDate`/`endDate` as separate fields. In practice the API rejects requests that supply only one — supply the same window in **both** forms. Example: `{"sourceTableId": 1, "dateTime": ["2026-05-19T00:00:00Z","2026-05-20T23:59:59Z"], "startDate": "2026-05-19T00:00:00Z", "endDate": "2026-05-20T23:59:59Z", "pageSize": 25, "pageNumber": 1}`.
 - **`approval_request_get_by_parameters` needs `statusId`.** Without it the server returns HTTP 500. Use `statusId=1` for pending requests.
+- **`approval_request_permit_application` is shape-sensitive in ways the spec doesn't document.** The full quirks live in the tool's description (which the LLM sees), but the short version: (1) `approvalRequest.json` must be copied verbatim from `approval_request_get_permit_application_by_id`; (2) `userinstance` is the portal shard (`"h"`, `"g"`, etc.); (3) for "this computer" scope all three `policyLevel` flags stay false — setting `toComputer: true` returns HTTP 417; (4) when the chosen `matchingApplication` is a BUILT-IN (`organizationName: "master"`) you must set `toEntireOrganization: true`, otherwise the server returns the misleading HTTP 401 `"Missing the '' permission"` even when the API user has the right roles.
+- **HTTP 401 `"Missing the '' permission"` (empty interpolation) is usually about body shape, not permissions.** ThreatLocker uses one error template for several permission-lookup paths; when the server can't dynamically resolve which permission the request requires (e.g. BUILT-IN-app vs computer-scope mismatch above), the placeholder ends up empty. Check the request body before re-granting roles.
 - **Empty responses surface as `{"_empty_response": true, "_status_code": 200}`.** Several ThreatLocker endpoints reply with HTTP 200 + either an empty body or the JSON literal `null` when there are no matching rows — the client converts both to this sentinel object so it isn't silently dropped.
 - **Transient errors are retried up to 3 times.** The client retries `429`, `500`, `502`, `503`, `504`, and network errors. When the server sends a `Retry-After` header (either delta-seconds or HTTP-date), it's honored and capped at 60s; otherwise backoff is exponential with AWS-style full jitter so concurrent retriers don't herd. `4xx` other than `429` are surfaced immediately without retry.
 

@@ -73,3 +73,103 @@ def register(mcp: FastMCP) -> None:
             json=body_json,
             extra_headers=extra_headers or None,
         )
+
+    @mcp.tool(
+        name="application_get_for_application_options",
+        description="Load Application List custom + built-in applications available to permit a file into. Use this when the `permit_application` flow needs `useExistingApplication: true` -- i.e., adding the requested file to an app discovered through means other than `application_get_matching_list`. Filter by `osType` (1=Windows, 2=MAC, 3=Linux, 5=Windows XP), optional `searchText` to narrow by name, and `includeBuiltIn` to include master-org BUILT-IN apps. (Renamed from the KB's `ApplicationGetListForAddToApplication`.)",
+    )
+    async def application_get_for_application_options(
+        body: Annotated[
+            models.ApplicationGetForApplicationOptionsDto, Field(description="Request body.")
+        ],
+        organization_id: Annotated[
+            str | None,
+            Field(
+                description="Override the default organization (ManagedOrganizationId header).",
+                default=None,
+            ),
+        ] = None,
+        override_organization_id: Annotated[
+            str | None,
+            Field(description="Optional OverrideManagedOrganizationId header.", default=None),
+        ] = None,
+    ) -> Any:
+        """Load Application List custom + built-in applications available to permit a file into. Use this when the `permit_application` flow needs `useExistingApplication: true` -- i.e., adding the requested file to an app discovered through means other than `application_get_matching_list`. Filter by `osType` (1=Windows, 2=MAC, 3=Linux, 5=Windows XP), optional `searchText` to narrow by name, and `includeBuiltIn` to include master-org BUILT-IN apps. (Renamed from the KB's `ApplicationGetListForAddToApplication`.)"""
+        body_json = body.model_dump(by_alias=True, exclude_none=True)
+        extra_headers = {}
+        if override_organization_id is not None:
+            extra_headers["OverrideManagedOrganizationId"] = override_organization_id
+        client = await get_client()
+        return await client.request(
+            "POST",
+            "/portalapi/Application/ApplicationGetForApplicationOptions",
+            organization_id=organization_id,
+            json=body_json,
+            extra_headers=extra_headers or None,
+        )
+
+    @mcp.tool(
+        name="application_get_for_maintenance_mode",
+        description="Get Application Options for Maintenance Scheduling List applications eligible for use with a Maintenance Mode when processing an approval request. Filter by `osType` (1=Windows, 2=MAC, 3=Linux, 5=Windows XP). Maintenance Modes (Installation/Learning/Monitor) are selected on the `permit_application` body via `policyConditions.ruleId` (1/2/3 respectively).",
+    )
+    async def application_get_for_maintenance_mode(
+        os_type: Annotated[int | None, Field(default=None)] = None,
+        organization_id: Annotated[
+            str | None,
+            Field(
+                description="Override the default organization (ManagedOrganizationId header).",
+                default=None,
+            ),
+        ] = None,
+        override_organization_id: Annotated[
+            str | None,
+            Field(description="Optional OverrideManagedOrganizationId header.", default=None),
+        ] = None,
+    ) -> Any:
+        """Get Application Options for Maintenance Scheduling List applications eligible for use with a Maintenance Mode when processing an approval request. Filter by `osType` (1=Windows, 2=MAC, 3=Linux, 5=Windows XP). Maintenance Modes (Installation/Learning/Monitor) are selected on the `permit_application` body via `policyConditions.ruleId` (1/2/3 respectively)."""
+        params = {"osType": os_type}
+        params = {k: v for k, v in params.items() if v is not None}
+        extra_headers = {}
+        if override_organization_id is not None:
+            extra_headers["OverrideManagedOrganizationId"] = override_organization_id
+        client = await get_client()
+        return await client.request(
+            "GET",
+            "/portalapi/Application/ApplicationGetForMaintenanceMode",
+            organization_id=organization_id,
+            params=params,
+            extra_headers=extra_headers or None,
+        )
+
+    @mcp.tool(
+        name="application_get_research_details_by_id",
+        description="Get Application Research Details by Id. Optional. Get ThreatLocker's research data (description, risks, mitigations) for an application before permitting it. Useful for decision support when the chosen `matchingApplication` or `existingApplication` is a sensitive built-in or unknown app.",
+    )
+    async def application_get_research_details_by_id(
+        application_id: Annotated[str | None, Field(default=None)] = None,
+        organization_id: Annotated[
+            str | None,
+            Field(
+                description="Override the default organization (ManagedOrganizationId header).",
+                default=None,
+            ),
+        ] = None,
+        override_organization_id: Annotated[
+            str | None,
+            Field(description="Optional OverrideManagedOrganizationId header.", default=None),
+        ] = None,
+    ) -> Any:
+        """Get Application Research Details by Id. Optional. Get ThreatLocker's research data (description, risks, mitigations) for an application before permitting it. Useful for decision support when the chosen `matchingApplication` or `existingApplication` is a sensitive built-in or unknown app."""
+        params = {"applicationId": application_id}
+        params = {k: v for k, v in params.items() if v is not None}
+        extra_headers = {}
+        if override_organization_id is not None:
+            extra_headers["OverrideManagedOrganizationId"] = override_organization_id
+        client = await get_client()
+        return await client.request(
+            "GET",
+            "/portalapi/Application/ApplicationGetResearchDetailsById",
+            organization_id=organization_id,
+            params=params,
+            extra_headers=extra_headers or None,
+        )

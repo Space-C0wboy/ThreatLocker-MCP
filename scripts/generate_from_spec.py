@@ -77,51 +77,93 @@ DESCRIPTION_OVERRIDES: dict[tuple[str, str], str] = {
         " picker), the result is the canonical list of accessible orgs for this key."
         " `searchText` filters by display name; pass an empty string for the full list."
     ),
+    ("/portalapi/Application/ApplicationGetForApplicationOptions", "post"): (
+        " List custom + built-in applications available to permit a file into."
+        " Use this when the `permit_application` flow needs"
+        " `useExistingApplication: true` -- i.e., adding the requested file to an"
+        " app discovered through means other than `application_get_matching_list`."
+        " Filter by `osType` (1=Windows, 2=MAC, 3=Linux, 5=Windows XP), optional"
+        " `searchText` to narrow by name, and `includeBuiltIn` to include"
+        " master-org BUILT-IN apps. (Renamed from the KB's"
+        " `ApplicationGetListForAddToApplication`.)"
+    ),
+    ("/portalapi/Application/ApplicationGetForMaintenanceMode", "get"): (
+        " List applications eligible for use with a Maintenance Mode when"
+        " processing an approval request. Filter by `osType` (1=Windows, 2=MAC,"
+        " 3=Linux, 5=Windows XP). Maintenance Modes (Installation/Learning/Monitor)"
+        " are selected on the `permit_application` body via"
+        " `policyConditions.ruleId` (1/2/3 respectively)."
+    ),
+    ("/portalapi/Application/ApplicationGetResearchDetailsById", "get"): (
+        " Optional. Get ThreatLocker's research data (description, risks,"
+        " mitigations) for an application before permitting it. Useful for"
+        " decision support when the chosen `matchingApplication` or"
+        " `existingApplication` is a sensitive built-in or unknown app."
+    ),
     ("/portalapi/ApprovalRequest/ApprovalRequestPermitApplication", "post"): (
-        " NOTE: workflow is take_ownership -> get_permit_application_by_id ->"
+        " WORKFLOW: take_ownership -> get_permit_application_by_id ->"
         " application_get_matching_list -> permit_application. Start from the"
-        " DTO returned by get_permit_application_by_id and apply the choices below."
-        " App-match discovery -- ALWAYS call `application_get_matching_list` with"
-        " the file details (filename, hash, sha256, path, processPath, certs,"
-        " osType) to discover matching apps. The `hasMatchingApplication` flag"
-        " inside the permit DTO is UNRELIABLE -- it can report `false` even when"
-        " matches exist. Trust `application_get_matching_list.hasMatching`."
-        " App selection -- set exactly ONE of three modes on `matchingApplications`"
-        " (preference order):"
-        " (a) PREFERRED -- use a match from `application_get_matching_list`."
-        " When multiple matches come back, prefer a tenant-owned app (its"
-        " `organizationId` equals the call's `organizationId`) over a master-org"
-        ' / BUILT-IN app (`organizationName: "master"`). Set'
-        " `useMatchingApplication: true`, populate `matchingApplication` with the"
-        " chosen result (applicationId, applicationName, name, organizationId,"
-        " organizationName, osType, suggestedPolicyId, status, isMaintained,"
-        " researchApplicationId), leave `existingApplication` as the null-filled"
-        " stub, set `useExistingApplication: false` and `useNewApplication: false`."
-        " (b) FALLBACK -- only when there is no match -- add the file to an"
-        " existing app discovered via other means. Set"
-        " `useExistingApplication: true`, populate"
-        " `existingApplication: {applicationId, applicationName, organizationId,"
-        " osType, ...}`, leave the others as null-filled stubs."
-        " (c) LAST RESORT -- create a new app. Set `useNewApplication: true` and"
-        " set `newApplicationName` to a non-null derived name (e.g. file stem"
-        ' title-cased: `vlc.exe` -> `"VLC"`). `null` returns HTTP 417 \'Must'
-        " enter a name for a new application'."
-        " Scope -- set exactly ONE on `policyLevel`:"
-        " * This Computer (default): all three flags false"
-        " (`toEntireOrganization`/`toComputerGroup`/`toComputer`); scope is"
-        " inferred from top-level `computerId`."
-        " * Computer group: `toComputerGroup: true`, populate"
-        " `selectedComputerGroup: {computerGroupId, name, organizationId,"
-        " osType, isGlobal}`, and set top-level `computerGroupId`."
-        " * Entire organization: `toEntireOrganization: true`; leave"
-        " `selectedComputerGroup` as null-filled stub."
-        " Action -- for elevate requests set `isElevationRequest: true` and"
-        " `isExecutionRequest: false`; for execute reverse them. Both are"
-        " spec-readOnly but MUST be sent matching the actual action type."
-        " Always send full null-filled stub sub-objects (`matchingApplication`,"
-        " `existingApplication`, `selectedComputerGroup`) rather than omitting"
-        " them. Wrong shape returns opaque HTTP 500 with no field-level hint."
-        " NOTE: `statusId` is required (e.g. 1 for Pending). Calls without it return HTTP 500."
+        " DTO returned by get_permit_application_by_id and modify the choices"
+        " below."
+        " REQUIRED FIELDS (KB-documented, all must be present):"
+        " `approvalRequest.approvalRequestId`;"
+        " `approvalRequest.json` -- copy verbatim from"
+        " get_permit_application_by_id (server uses it to reconstruct"
+        " file/action context, omitting it causes silent failures);"
+        " `userinstance` -- the portal shard ('h', 'g', etc.), parsed from the"
+        " request's `portalApiUrl` subdomain;"
+        " `isFromApproval: true`; `hasOriginApprovalCenter: true`;"
+        " `actionType` (copy from request: 'elevate'/'execute'/'install');"
+        " `osType` (1=Windows, 2=Mac, 3=Linux, 5=WinXP);"
+        " `organizationId`, `computerId` (copy from request);"
+        " `organizationIds` -- list of parent org IDs above the request's org"
+        " (`[]` for top-level); `fileDetails.fullPath`."
+        " APP SELECTION (set exactly ONE mode on `matchingApplications`):"
+        " (a) PREFERRED -- use `application_get_matching_list` result. Prefer"
+        " tenant-owned match (its `organizationId` equals the call's"
+        " `organizationId`) over master-org/BUILT-IN (`organizationName:"
+        ' "master"`). Set `useMatchingApplication: true`, populate'
+        " `matchingApplication` with the chosen result; set others false and"
+        " their objects to `null`. The DTO's `hasMatchingApplication` flag is"
+        " UNRELIABLE -- trust `application_get_matching_list.hasMatching`"
+        " instead."
+        " *** CRITICAL -- BUILT-IN match REQUIRES entire-org scope. When the"
+        ' chosen match has `organizationName: "master"`, you MUST set'
+        " `policyLevel.toEntireOrganization: true`. Pairing a BUILT-IN with"
+        " computer-scope returns HTTP 401 \"Missing the '' permission\""
+        " (misleading -- it's actually a body-shape error). Verified"
+        " 2026-05-21. Tenant-owned matches and new apps use the default"
+        " all-flags-false scope."
+        " (b) FALLBACK -- add to existing custom app (discover via"
+        " `application_get_for_application_options`). Set"
+        " `useExistingApplication: true`, populate `existingApplication`;"
+        " others null."
+        " (c) LAST RESORT -- create new app. Set `useNewApplication: true` and"
+        " `newApplicationName` to a non-null derived name (e.g. file stem"
+        ' title-cased: `vlc.exe` -> "VLC"). Null returns HTTP 417'
+        " 'Must enter a name for a new application'."
+        " POLICY (`policyConditions.ruleId`): 0=manual rules, 1=Install Mode"
+        " 1hr, 2=Learning Mode 1hr, 3=Monitor Mode 1hr. Set"
+        " `useExistingPolicy: true` to reuse an existing policy"
+        " (`manualOptions` then carries the rule criteria)."
+        " SCOPE (`policyLevel`): default 'this computer' = ALL THREE flags"
+        " false (`toEntireOrganization`/`toComputerGroup`/`toComputer`);"
+        " scope is inferred from top-level `computerId`. Setting"
+        " `toComputer: true` returns HTTP 417 'Provided applies to ID does"
+        " not associate with a known OS type'. For computer group, set"
+        " `toComputerGroup: true` and populate `selectedComputerGroup`"
+        " (discover via `computer_group_get_dropdown_by_organization_id`)."
+        " For entire-org, set `toEntireOrganization: true`."
+        " ACTION TYPE: for elevate set `isElevationRequest: true` and"
+        " `isExecutionRequest: false`; for execute reverse. Both are"
+        " spec-readOnly but MUST be sent matching the action."
+        " SHAPE: send `null` (not omit) for unused sub-objects --"
+        " `matchingApplication`, `existingApplication`, `selectedComputerGroup`,"
+        " `policyExpirationDate`, `elevationExpirationDate`. Wrong shape ="
+        " opaque HTTP 500."
+        " PERMISSIONS: API key user needs one of 'Approve for Entire"
+        " Organization', 'Approve for Group', 'Approve for Single Computer',"
+        " or 'Approve for Single Computer Application Only' in Administrators."
     ),
 }
 
@@ -226,6 +268,14 @@ CHOSEN_ENDPOINTS: list[tuple[str, str]] = [
     ("/portalapi/Computer/ComputerMoveToOtherOrganization", "post"),
     ("/portalapi/Computer/ComputerUpdateBaselineRescan", "post"),
     # ApprovalRequest (8)
+    # Note: AuthorizeForPermitById is intentionally NOT exposed -- 2026-05 probe
+    # against a pending elevate request showed it 400s with "Approval Request
+    # already actioned by " (empty actor interpolation), even after
+    # UpdateForTakeOwnership. The official KB
+    # (threatlocker.kb.help/processing-application-control-approval-requests-through-api)
+    # does not document it as an approve path; it appears to be a multi-tier
+    # MSP-only "pre-authorize for downstream permit" workflow. The canonical
+    # approve path is ApprovalRequestPermitApplication.
     ("/portalapi/ApprovalRequest/ApprovalRequestGetByParameters", "post"),
     ("/portalapi/ApprovalRequest/ApprovalRequestGetById", "get"),
     ("/portalapi/ApprovalRequest/ApprovalRequestGetCount", "get"),
@@ -249,9 +299,15 @@ CHOSEN_ENDPOINTS: list[tuple[str, str]] = [
     ("/portalapi/MaintenanceMode/MaintenanceModeGetByComputerId", "get"),
     ("/portalapi/MaintenanceMode/MaintenanceModeInsert", "post"),
     ("/portalapi/MaintenanceMode/MaintenanceModeEndById", "patch"),
-    # Application (2)
+    # Application (5)
     ("/portalapi/Application/ApplicationGetById", "get"),
     ("/portalapi/Application/ApplicationGetMatchingList", "post"),
+    # Helpers documented in the ThreatLocker KB approval-flow article. The KB
+    # called the first one `ApplicationGetListForAddToApplication` but the
+    # current spec ships it as `ApplicationGetForApplicationOptions`.
+    ("/portalapi/Application/ApplicationGetForApplicationOptions", "post"),
+    ("/portalapi/Application/ApplicationGetForMaintenanceMode", "get"),
+    ("/portalapi/Application/ApplicationGetResearchDetailsById", "get"),
     # Policy (1)
     ("/portalapi/Policy/PolicyGetById", "get"),
     # OnlineDevices (1)
