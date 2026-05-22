@@ -121,7 +121,7 @@ Fully quit Claude Desktop (tray icon → **Quit** on Windows; **⌘Q** on macOS)
 #### Pinning to a specific version
 
 ```json
-"args": ["threatlocker-mcp@0.2.0"]
+"args": ["threatlocker-mcp@0.2.1"]
 ```
 
 #### Forcing a refresh

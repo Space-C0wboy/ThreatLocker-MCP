@@ -1,12 +1,12 @@
 [project]
 name = "threatlocker-mcp"
-version = "0.2.0"
+version = "0.2.1"
 description = "MCP server for the ThreatLocker Portal API"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
-    { name = "Kierston Grantham", email = "kierston.grantham@mcleodsoftware.com" },
+    { name = "Kierston Grantham", email = "Space-C0wboy@users.noreply.github.com" },
 ]
 keywords = ["mcp", "threatlocker", "security", "endpoint-protection", "ai-tools", "claude"]
 classifiers = [
