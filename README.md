@@ -13,14 +13,13 @@ An [MCP](https://modelcontextprotocol.io/) server that exposes the [ThreatLocker
 ---
 
 > [!WARNING]
-> **This project is in early development and is not production-ready.**
+> **This server can perform destructive actions against your ThreatLocker environment.**
 >
-> - Endpoint mappings come from the published OpenAPI spec but have **not been exhaustively tested** against a live tenant.
-> - The server can perform **destructive actions**: enabling/disabling protection on endpoints, approving or denying security requests, and moving computers between organizations. A hallucinated tool argument from your AI assistant could alter your ThreatLocker configuration in ways that affect endpoint security.
+> - Tools can enable/disable endpoint protection, approve or deny security requests, modify tag membership, end active maintenance windows, approve storage devices, and move computers between organizations. A hallucinated tool argument from your AI assistant could alter your ThreatLocker configuration in ways that affect endpoint security.
 > - There are **no built-in rate-limit protections or confirmation prompts** beyond what ThreatLocker itself records.
 >
 > **Recommended posture:**
-> - Test against a non-production or lab tenant before deploying to a live environment.
+> - Try the server against a non-production or lab tenant before granting it access to a live environment.
 > - Use a ThreatLocker API key scoped to the **minimum permissions** your use case requires.
 > - Review every destructive tool call before allowing execution. Claude Desktop requires tool-call approval by default — keep that enabled.
 > - Treat the API key with the same care as portal admin credentials, because functionally it is one.

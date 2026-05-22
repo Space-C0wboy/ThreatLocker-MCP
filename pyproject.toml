@@ -1,6 +1,6 @@
 [project]
 name = "threatlocker-mcp"
-version = "0.1.0"
+version = "1.0.0"
 description = "MCP server for the ThreatLocker Portal API"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -10,7 +10,7 @@ authors = [
 ]
 keywords = ["mcp", "threatlocker", "security", "endpoint-protection", "ai-tools", "claude"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: System Administrators",
     "Intended Audience :: Information Technology",
     "License :: OSI Approved :: MIT License",
