@@ -8,6 +8,8 @@ An [MCP](https://modelcontextprotocol.io/) server that exposes the [ThreatLocker
 
 44 tools are generated directly from the official OpenAPI 3.0 spec, with fully-typed Pydantic request bodies, stdio and HTTP transports, and per-call organization override for parent/child tenant setups.
 
+*This is an independent, community-maintained project and is not affiliated with, endorsed by, or sponsored by ThreatLocker, Inc. "ThreatLocker" is a trademark of ThreatLocker, Inc.*
+
 ---
 
 > [!WARNING]

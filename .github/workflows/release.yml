@@ -1,0 +1,81 @@
+name: Publish to PyPI
+
+# Triggered when a GitHub Release is published. The release tag should match
+# the version in pyproject.toml (e.g. tag v0.2.0 for version = "0.2.0").
+#
+# Setup (one-time, before first release):
+#   1. Publish v0.1.0 manually via twine (Trusted Publishers can't bootstrap a
+#      project that doesn't exist on PyPI yet).
+#   2. On PyPI → your project → Publishing → "Add a new pending publisher",
+#      fill in:
+#        Owner: Space-C0wboy
+#        Repository: ThreatLocker-MCP
+#        Workflow filename: release.yml
+#        Environment name: pypi
+#   3. In this GitHub repo, Settings → Environments → "New environment" named
+#      "pypi". Optionally add required reviewers for an extra gate.
+#
+# After setup, releasing a new version is: bump pyproject.toml version, commit,
+# tag (git tag v0.2.0 && git push --tags), then publish a Release in GitHub
+# pointing at that tag. This workflow runs automatically — no API tokens.
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  test:
+    name: "Verify (Python ${{ matrix.python-version }})"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: uv sync --extra dev
+      - name: Lint (ruff)
+        run: uv run ruff check .
+      - name: Format check (ruff)
+        run: uv run ruff format --check .
+      - name: Tests
+        run: uv run pytest -v
+
+  build:
+    name: Build distributions
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          python-version: "3.12"
+      - name: Install build tool
+        run: uv pip install --system build
+      - name: Build sdist and wheel
+        run: python -m build
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi   # see workflow comments for one-time setup
+    permissions:
+      id-token: write   # required for Trusted Publishing (OIDC)
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
