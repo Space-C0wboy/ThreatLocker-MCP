@@ -6,7 +6,7 @@
 
 An [MCP](https://modelcontextprotocol.io/) server that exposes the [ThreatLocker Portal API](https://portalapi.h.threatlocker.com/swagger/index.html) as callable tools for AI assistants such as Claude Desktop and Claude Code.
 
-36 tools are generated directly from the official OpenAPI 3.0 spec, with fully-typed Pydantic request bodies, stdio and HTTP transports, and per-call organization override for parent/child tenant setups.
+44 tools are generated directly from the official OpenAPI 3.0 spec, with fully-typed Pydantic request bodies, stdio and HTTP transports, and per-call organization override for parent/child tenant setups.
 
 ---
 
@@ -101,7 +101,7 @@ Add the following block to your Claude Desktop configuration file:
 
 > **Windows note:** The `PATHEXT` entry is required. Claude Desktop does not pass `PATHEXT` to child processes, which prevents `uv` from locating `git.exe` even when Git is installed. The symptom is a `Git executable not found` error in the log. Non-Windows users can omit that line.
 
-Fully quit Claude Desktop (tray icon → **Quit** on Windows; **⌘Q** on macOS), then reopen it. The first launch takes 30–60 seconds while `uvx` clones the repository and installs dependencies. Subsequent launches are nearly instant due to caching. You should see 36 ThreatLocker tools listed in the tools menu.
+Fully quit Claude Desktop (tray icon → **Quit** on Windows; **⌘Q** on macOS), then reopen it. The first launch takes 30–60 seconds while `uvx` clones the repository and installs dependencies. Subsequent launches are nearly instant due to caching. You should see 44 ThreatLocker tools listed in the tools menu.
 
 **Pinning a version:** Once a release is tagged, replace the URL with `git+https://github.com/Space-C0wboy/ThreatLocker-MCP@v0.1.0` to lock to a specific version.
 
@@ -113,11 +113,12 @@ Fully quit Claude Desktop (tray icon → **Quit** on Windows; **⌘Q** on macOS)
 
 | Area | Count | Capabilities |
 |------|:-----:|--------------|
-| **Computers** | 8 | Search, get/edit details, enable/disable protection, update maintenance mode, baseline rescan, move between orgs |
-| **Approval Requests** | 8 | Search, get by ID, count pending, get permit details, approve, reject, ignore, take ownership |
+| **Computers** | 9 | Search, get/edit details, enable/disable protection, update maintenance mode, baseline rescan, move between orgs, finish active maintenance |
+| **Approval Requests** | 11 | Search, get by ID, count pending, get permit details, approve, reject, ignore, take ownership, storage approval read/permit, file download details |
 | **Application** | 5 | Get by ID, get matching list, list available apps for permit-into, list apps for maintenance mode, research details |
 | **Action Log** | 4 | Search by parameters, get by ID, file history, file download details |
-| **Maintenance Mode** | 3 | Get schedule by computer, insert, end by ID |
+| **Maintenance Mode** | 4 | Get schedule by computer, insert, end by ID, reschedule end time |
+| **Tag** | 3 | Get by ID, dropdown options by org, update |
 | **System Audit** | 2 | Search by parameters, health center |
 | **Computer Groups** | 2 | Get groups with computers, dropdown by org |
 | **Policy** | 1 | Get by ID |
@@ -125,7 +126,7 @@ Fully quit Claude Desktop (tray icon → **Quit** on Windows; **⌘Q** on macOS)
 | **Reports** | 1 | Get by organization |
 | **Organization** | 1 | `list_organizations` — discover org GUIDs this API key can target |
 
-All request bodies are typed Pydantic models (54 generated from the spec), so the AI assistant receives full schema validation and autocomplete. The wire format preserves the original camelCase field names expected by the API.
+All request bodies are typed Pydantic models (64 generated from the spec), so the AI assistant receives full schema validation and autocomplete. The wire format preserves the original camelCase field names expected by the API.
 
 ---
 
