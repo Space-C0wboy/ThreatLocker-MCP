@@ -174,7 +174,18 @@ DESCRIPTION_OVERRIDES: dict[tuple[str, str], str] = {
 # unambiguously needs one specific field -- if the API accepts either of two
 # alternatives (e.g. hostname OR computerId), document it in DESCRIPTION_OVERRIDES
 # instead, since a single-param promotion can't express one-of semantics.
-REQUIRED_PARAM_OVERRIDES: dict[tuple[str, str], set[str]] = {}
+REQUIRED_PARAM_OVERRIDES: dict[tuple[str, str], set[str]] = {
+    # The spec marks all three query params optional, but the tag-dropdown
+    # endpoint follows the standard portal-API pattern (e.g. statusId on
+    # ApprovalRequestGetByParameters) where a missing required field returns
+    # HTTP 500. Promote them to required so callers fail loudly. If live-test
+    # reveals one is actually tolerated, demote it.
+    ("/portalapi/Tag/TagGetDowndownOptionsByOrganizationId", "get"): {
+        "includeBuiltIns",
+        "tagType",
+        "includeNetworkTagInMaster",
+    },
+}
 
 
 # Default values to inject for header parameters when the caller doesn't pass one.
