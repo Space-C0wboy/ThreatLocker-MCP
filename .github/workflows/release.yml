@@ -52,12 +52,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
-        with:
-          python-version: "3.12"
-      - name: Install build tool
-        run: uv pip install --system build
       - name: Build sdist and wheel
-        run: python -m build
+        run: uv build
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
