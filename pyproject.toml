@@ -5,6 +5,7 @@ description = "MCP server for the ThreatLocker Portal API"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
+license-files = []
 authors = [
     { name = "Kierston Grantham", email = "Space-C0wboy@users.noreply.github.com" },
 ]
