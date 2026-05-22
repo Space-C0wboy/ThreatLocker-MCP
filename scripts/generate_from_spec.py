@@ -70,6 +70,13 @@ DESCRIPTION_OVERRIDES: dict[tuple[str, str], str] = {
         " `computerGroupId` and set only the `include_*` flags you actually need;"
         " unscoped calls may exceed downstream output limits."
     ),
+    ("/portalapi/Computer/ComputerUpdateToFinishMaintenanceMode", "post"): (
+        " Ends ACTIVE maintenance mode on a specific computer immediately."
+        " Distinct from `maintenance_mode_end_by_id`, which ends a SCHEDULED"
+        " maintenance window (in progress or not) identified by"
+        " `maintenanceModeId`. Use this when you have a `computerId` and want"
+        " enforcement re-enabled now. WARNING: may break in-progress installs."
+    ),
     ("/portalapi/Organization/OrganizationGetForMoveComputers", "get"): (
         " Returns the organizations the current API key can target. Use this FIRST to"
         " discover org GUIDs to pass as `organization_id` to other tools. Despite the"
@@ -164,6 +171,13 @@ DESCRIPTION_OVERRIDES: dict[tuple[str, str], str] = {
         " PERMISSIONS: API key user needs one of 'Approve for Entire"
         " Organization', 'Approve for Group', 'Approve for Single Computer',"
         " or 'Approve for Single Computer Application Only' in Administrators."
+    ),
+    ("/portalapi/MaintenanceMode/MaintenanceModeUpdateEndDateTimeForSpecificDate", "post"): (
+        " Reschedules the end time of an existing maintenance window for a"
+        " specific computer without terminating it. Pass the new"
+        " `maintenanceEndDate` (ISO 8601 UTC). To END maintenance immediately"
+        " use `computer_update_to_finish_maintenance_mode` (by computer) or"
+        " `maintenance_mode_end_by_id` (by maintenance schedule)."
     ),
     ("/portalapi/ApprovalRequest/ApprovalRequestPermitStorageApproval", "post"): (
         " NOT YET LIVE-TESTED -- expect shape sensitivity similar to"
