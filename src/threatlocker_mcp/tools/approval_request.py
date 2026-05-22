@@ -268,3 +268,101 @@ def register(mcp: FastMCP) -> None:
             json=body_json,
             extra_headers=extra_headers or None,
         )
+
+    @mcp.tool(
+        name="approval_request_get_storage_approval_by_id",
+        description="Get Storage Approval Request By Id",
+    )
+    async def approval_request_get_storage_approval_by_id(
+        approval_request_id: Annotated[str | None, Field(default=None)] = None,
+        organization_id: Annotated[
+            str | None,
+            Field(
+                description="Override the default organization (ManagedOrganizationId header).",
+                default=None,
+            ),
+        ] = None,
+        override_organization_id: Annotated[
+            str | None,
+            Field(description="Optional OverrideManagedOrganizationId header.", default=None),
+        ] = None,
+    ) -> Any:
+        """Get Storage Approval Request By Id"""
+        params = {"approvalRequestId": approval_request_id}
+        params = {k: v for k, v in params.items() if v is not None}
+        extra_headers = {}
+        if override_organization_id is not None:
+            extra_headers["OverrideManagedOrganizationId"] = override_organization_id
+        client = await get_client()
+        return await client.request(
+            "GET",
+            "/portalapi/ApprovalRequest/ApprovalRequestGetStorageApprovalById",
+            organization_id=organization_id,
+            params=params,
+            extra_headers=extra_headers or None,
+        )
+
+    @mcp.tool(
+        name="approval_request_permit_storage_approval",
+        description="Approve Storage Request NOT YET LIVE-TESTED -- expect shape sensitivity similar to `approval_request_permit_application`. WORKFLOW: take_ownership -> get_storage_approval_by_id -> permit_storage_approval. Start from the DTO returned by `approval_request_get_storage_approval_by_id` and modify the choices below. LIKELY REQUIRED (by analogy with the application-permit flow): `approvalRequest` -- copy verbatim from get_storage_approval_by_id; `json` -- verbatim copy from the same response, used by the server to reconstruct the storage-request context. DEVICE / SCOPE FLAGS (set exactly one mode): `addDeviceToExisting` -- add the storage device to an existing storage policy (populate `existingStoragePolicy`); `deviceExists` -- the device is already known to ThreatLocker; `allStorageDevices` -- apply to all storage devices in scope; `allFilePaths` -- apply to all paths rather than just `selectedPath`; `allUserGroups` -- apply to all users/groups rather than the populated `usersList`/`userGroups`. Set unused companion objects (`existingStoragePolicy`, `newStorageDevice`) to `null`, not omitted. EXPIRATION: `expirationDate` is ISO 8601 UTC; null = permanent. RESPONSE: `responseSubject` and `responseReason` are shown to the requester; `notifyOnResponse` controls whether they're emailed. If the server returns HTTP 401 \"Missing the '' permission\" (empty interpolation), suspect body-shape rather than permissions -- same root cause as the application-permit flow.",
+    )
+    async def approval_request_permit_storage_approval(
+        body: Annotated[models.StorageApprovalDto, Field(description="Request body.")],
+        organization_id: Annotated[
+            str | None,
+            Field(
+                description="Override the default organization (ManagedOrganizationId header).",
+                default=None,
+            ),
+        ] = None,
+        override_organization_id: Annotated[
+            str | None,
+            Field(description="Optional OverrideManagedOrganizationId header.", default=None),
+        ] = None,
+    ) -> Any:
+        """Approve Storage Request NOT YET LIVE-TESTED -- expect shape sensitivity similar to `approval_request_permit_application`. WORKFLOW: take_ownership -> get_storage_approval_by_id -> permit_storage_approval. Start from the DTO returned by `approval_request_get_storage_approval_by_id` and modify the choices below. LIKELY REQUIRED (by analogy with the application-permit flow): `approvalRequest` -- copy verbatim from get_storage_approval_by_id; `json` -- verbatim copy from the same response, used by the server to reconstruct the storage-request context. DEVICE / SCOPE FLAGS (set exactly one mode): `addDeviceToExisting` -- add the storage device to an existing storage policy (populate `existingStoragePolicy`); `deviceExists` -- the device is already known to ThreatLocker; `allStorageDevices` -- apply to all storage devices in scope; `allFilePaths` -- apply to all paths rather than just `selectedPath`; `allUserGroups` -- apply to all users/groups rather than the populated `usersList`/`userGroups`. Set unused companion objects (`existingStoragePolicy`, `newStorageDevice`) to `null`, not omitted. EXPIRATION: `expirationDate` is ISO 8601 UTC; null = permanent. RESPONSE: `responseSubject` and `responseReason` are shown to the requester; `notifyOnResponse` controls whether they're emailed. If the server returns HTTP 401 "Missing the '' permission" (empty interpolation), suspect body-shape rather than permissions -- same root cause as the application-permit flow."""
+        body_json = body.model_dump(by_alias=True, exclude_none=True)
+        extra_headers = {}
+        if override_organization_id is not None:
+            extra_headers["OverrideManagedOrganizationId"] = override_organization_id
+        client = await get_client()
+        return await client.request(
+            "POST",
+            "/portalapi/ApprovalRequest/ApprovalRequestPermitStorageApproval",
+            organization_id=organization_id,
+            json=body_json,
+            extra_headers=extra_headers or None,
+        )
+
+    @mcp.tool(
+        name="approval_request_get_file_download_details_by_id",
+        description="Get File Download Details By Approval Request Id",
+    )
+    async def approval_request_get_file_download_details_by_id(
+        approval_request_id: Annotated[str | None, Field(default=None)] = None,
+        organization_id: Annotated[
+            str | None,
+            Field(
+                description="Override the default organization (ManagedOrganizationId header).",
+                default=None,
+            ),
+        ] = None,
+        override_organization_id: Annotated[
+            str | None,
+            Field(description="Optional OverrideManagedOrganizationId header.", default=None),
+        ] = None,
+    ) -> Any:
+        """Get File Download Details By Approval Request Id"""
+        params = {"approvalRequestId": approval_request_id}
+        params = {k: v for k, v in params.items() if v is not None}
+        extra_headers = {}
+        if override_organization_id is not None:
+            extra_headers["OverrideManagedOrganizationId"] = override_organization_id
+        client = await get_client()
+        return await client.request(
+            "GET",
+            "/portalapi/ApprovalRequest/ApprovalRequestGetFileDownloadDetailsById",
+            organization_id=organization_id,
+            params=params,
+            extra_headers=extra_headers or None,
+        )

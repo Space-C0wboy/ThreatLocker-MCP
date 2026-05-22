@@ -662,6 +662,42 @@ class ComputerUpdateMaintenanceModeDto(BaseModel):
     )
 
 
+class ComputerUpdateToFinishMaintenanceModeDto(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    computer_id: str | None = Field(default=None, alias="computerId")
+    hostname: str | None = Field(default=None)
+    is_isolated: bool = Field(default=False, alias="isIsolated")
+    is_locked_out: bool = Field(default=False, alias="isLockedOut")
+    last_version_change: str | None = Field(default=None, alias="lastVersionChange")
+    maintenance_type_id: int = Field(default=0, alias="maintenanceTypeId")
+    monitor_only_date_time: str | None = Field(default=None, alias="monitorOnlyDateTime")
+    maintenance_end_date: str | None = Field(default=None, alias="maintenanceEndDate")
+    os_type: int = Field(default=0, alias="osType")
+    organization_id: str | None = Field(default=None, alias="organizationId")
+    pending_base_files: bool = Field(default=False, alias="pendingBaseFiles")
+    threat_locker_version: str | None = Field(default=None, alias="threatLockerVersion")
+    threat_locker_version_id: str | None = Field(default=None, alias="threatLockerVersionId")
+    threat_locker_version_group: str | None = Field(default=None, alias="threatLockerVersionGroup")
+    threat_locker_version_group_id: str | None = Field(
+        default=None, alias="threatLockerVersionGroupId"
+    )
+
+
+class DropdownOption(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    label: str | None = Field(default=None)
+    value: str | None = Field(default=None)
+    numeric_value: int | None = Field(default=None, alias="numericValue")
+    entity_type: int | None = Field(default=None, alias="entityType")
+    parent_id: str | None = Field(default=None, alias="parentId")
+    disabled: bool = Field(default=False)
+    tooltip: str | None = Field(default=None)
+    feature_configuration_ids: list[int] | None = Field(
+        default=None, alias="featureConfigurationIds"
+    )
+    is_supported: bool | None = Field(default=None, alias="isSupported")
+
+
 class MaintenanceApplicationDto(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="allow")
     application_id: str | None = Field(default=None, alias="applicationId")
@@ -718,6 +754,27 @@ class MaintenanceModeInsertDto(BaseModel):
     )
     ticket_number: str | None = Field(default=None, alias="ticketNumber")
     notes: str | None = Field(default=None)
+
+
+class MaintenanceModeUpdateEndDateTimeDto(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    computer_id: str | None = Field(default=None, alias="computerId")
+    computer_name: str | None = Field(default=None, alias="computerName")
+    is_isolated: bool = Field(default=False, alias="isIsolated")
+    is_locked_out: bool = Field(default=False, alias="isLockedOut")
+    last_version_change: str | None = Field(default=None, alias="lastVersionChange")
+    maintenance_end_date: str | None = Field(default=None, alias="maintenanceEndDate")
+    maintenance_type_id: int = Field(default=0, alias="maintenanceTypeId")
+    monitor_only_date_time: str | None = Field(default=None, alias="monitorOnlyDateTime")
+    organization_id: str | None = Field(default=None, alias="organizationId")
+    os_type: int = Field(default=0, alias="osType")
+    pending_base_files: bool = Field(default=False, alias="pendingBaseFiles")
+    threat_locker_version: str | None = Field(default=None, alias="threatLockerVersion")
+    threat_locker_version_id: str | None = Field(default=None, alias="threatLockerVersionId")
+    threat_locker_version_group: str | None = Field(default=None, alias="threatLockerVersionGroup")
+    threat_locker_version_group_id: str | None = Field(
+        default=None, alias="threatLockerVersionGroupId"
+    )
 
 
 class NetworkExclusionDto(BaseModel):
@@ -888,6 +945,62 @@ class PermitApplicationDto(BaseModel):
     is_execution_request: bool = Field(default=False, alias="isExecutionRequest")
 
 
+class PolicyUserGroupDto(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    text: str | None = Field(default=None)
+    value: str | None = Field(default=None)
+
+
+class StoragePolicyBasicDto(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    storage_policy_id: str | None = Field(default=None, alias="storagePolicyId")
+    name: str | None = Field(default=None)
+    processes_list: list[str] | None = Field(default=None, alias="processesList")
+
+
+class StorageDeviceDto(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    storage_device_id: str | None = Field(default=None, alias="storageDeviceId")
+    organization_id: str | None = Field(default=None, alias="organizationId")
+    name: str | None = Field(default=None)
+    serial_number: str | None = Field(default=None, alias="serialNumber")
+    owner: str | None = Field(default=None)
+    manufacturer: str | None = Field(default=None)
+    storage_policy_id: str | None = Field(default=None, alias="storagePolicyId")
+    storage_policy_ids: list[str] | None = Field(default=None, alias="storagePolicyIds")
+
+
+class StorageApprovalDto(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    approval_request: ApprovalRequestDto | None = Field(default=None, alias="approvalRequest")
+    add_device_to_existing: bool = Field(default=False, alias="addDeviceToExisting")
+    existing_storage_policy: StoragePolicyBasicDto | None = Field(
+        default=None, alias="existingStoragePolicy"
+    )
+    add_device_name: str | None = Field(default=None, alias="addDeviceName")
+    policy_name: str | None = Field(default=None, alias="policyName")
+    entity_type: int = Field(default=0, alias="entityType")
+    applies_to_id: str | None = Field(default=None, alias="appliesToId")
+    policy_type: str | None = Field(default=None, alias="policyType")
+    all_storage_devices: bool = Field(default=False, alias="allStorageDevices")
+    new_storage_device: StorageDeviceDto | None = Field(default=None, alias="newStorageDevice")
+    device_exists: bool = Field(default=False, alias="deviceExists")
+    all_file_paths: bool = Field(default=False, alias="allFilePaths")
+    selected_path: str | None = Field(default=None, alias="selectedPath")
+    device_type: str | None = Field(default=None, alias="deviceType")
+    encryption_status: int = Field(default=0, alias="encryptionStatus")
+    json_: str | None = Field(default=None, alias="json")
+    all_user_groups: bool = Field(default=False, alias="allUserGroups")
+    users: str | None = Field(default=None)
+    users_list: list[str] | None = Field(default=None, alias="usersList")
+    user_groups: list[PolicyUserGroupDto] | None = Field(default=None, alias="userGroups")
+    expiration_date: str | None = Field(default=None, alias="expirationDate")
+    response_subject: str | None = Field(default=None, alias="responseSubject")
+    response_reason: str | None = Field(default=None, alias="responseReason")
+    notify_on_response: bool = Field(default=False, alias="notifyOnResponse")
+    processes_list: list[str] | None = Field(default=None, alias="processesList")
+
+
 class SystemAuditHealthCenterParams(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="allow")
     days: int = Field(default=30)
@@ -921,6 +1034,28 @@ class SystemAuditParametersDto(BaseModel):
     function: str | None = Field(default=None)
     page: str | None = Field(default=None)
     email_addresses: list[str] | None = Field(default=None, alias="emailAddresses")
+
+
+class TagItemDto(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    tag_id: str | None = Field(default=None, alias="tagId")
+    tag_item_id: int = Field(default=0, alias="tagItemId")
+    tag_prefix_type_id: int = Field(default=0, alias="tagPrefixTypeId")
+    tag_item_type: int = Field(default=0, alias="tagItemType")
+    value: str | None = Field(default=None)
+
+
+class TagDto(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    tag_id: str | None = Field(default=None, alias="tagId")
+    organization_id: str | None = Field(default=None, alias="organizationId")
+    name: str | None = Field(default=None)
+    active: bool = Field(default=False)
+    tag_type: int = Field(default=0, alias="tagType")
+    tag_items_text: list[DropdownOption] | None = Field(default=None, alias="tagItemsText")
+    tag_items_i_pv4: list[DropdownOption] | None = Field(default=None, alias="tagItemsIPv4")
+    tag_items_i_pv6: list[DropdownOption] | None = Field(default=None, alias="tagItemsIPv6")
+    all_tag_items: list[TagItemDto] | None = Field(default=None, alias="allTagItems")
 
 
 # Resolve any forward references
@@ -961,11 +1096,14 @@ ComputerRescanBaselineDto.model_rebuild()
 ComputerTransferDto.model_rebuild()
 ComputerUpdateDto.model_rebuild()
 ComputerUpdateMaintenanceModeDto.model_rebuild()
+ComputerUpdateToFinishMaintenanceModeDto.model_rebuild()
+DropdownOption.model_rebuild()
 MaintenanceApplicationDto.model_rebuild()
 MaintenanceExistingApplicationDto.model_rebuild()
 MaintenanceModeConditionsDto.model_rebuild()
 MaintenanceModeEndDto.model_rebuild()
 MaintenanceModeInsertDto.model_rebuild()
+MaintenanceModeUpdateEndDateTimeDto.model_rebuild()
 NetworkExclusionDto.model_rebuild()
 PermitAdminNotes.model_rebuild()
 PermitFileDetails.model_rebuild()
@@ -976,5 +1114,11 @@ PermitPolicyLevel.model_rebuild()
 SystemAuditDetails.model_rebuild()
 SystemAuditItem.model_rebuild()
 PermitApplicationDto.model_rebuild()
+PolicyUserGroupDto.model_rebuild()
+StoragePolicyBasicDto.model_rebuild()
+StorageDeviceDto.model_rebuild()
+StorageApprovalDto.model_rebuild()
 SystemAuditHealthCenterParams.model_rebuild()
 SystemAuditParametersDto.model_rebuild()
+TagItemDto.model_rebuild()
+TagDto.model_rebuild()

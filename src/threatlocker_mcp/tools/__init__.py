@@ -14,6 +14,7 @@ from . import (
     policy,
     report,
     system_audit,
+    tag,
 )
 
 
@@ -29,3 +30,4 @@ def register_all(mcp: FastMCP) -> None:
     policy.register(mcp)
     report.register(mcp)
     system_audit.register(mcp)
+    tag.register(mcp)

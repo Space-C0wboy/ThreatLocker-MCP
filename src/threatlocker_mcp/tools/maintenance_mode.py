@@ -105,3 +105,37 @@ def register(mcp: FastMCP) -> None:
             json=body_json,
             extra_headers=extra_headers or None,
         )
+
+    @mcp.tool(
+        name="maintenance_mode_update_end_date_time_for_specific_date",
+        description="Updated Maintenance Mode End Date Time. Reschedules the end time of an existing maintenance window for a specific computer without terminating it. Pass the new `maintenanceEndDate` (ISO 8601 UTC). To END maintenance immediately use `computer_update_to_finish_maintenance_mode` (by computer) or `maintenance_mode_end_by_id` (by maintenance schedule).",
+    )
+    async def maintenance_mode_update_end_date_time_for_specific_date(
+        body: Annotated[
+            models.MaintenanceModeUpdateEndDateTimeDto, Field(description="Request body.")
+        ],
+        organization_id: Annotated[
+            str | None,
+            Field(
+                description="Override the default organization (ManagedOrganizationId header).",
+                default=None,
+            ),
+        ] = None,
+        override_organization_id: Annotated[
+            str | None,
+            Field(description="Optional OverrideManagedOrganizationId header.", default=None),
+        ] = None,
+    ) -> Any:
+        """Updated Maintenance Mode End Date Time. Reschedules the end time of an existing maintenance window for a specific computer without terminating it. Pass the new `maintenanceEndDate` (ISO 8601 UTC). To END maintenance immediately use `computer_update_to_finish_maintenance_mode` (by computer) or `maintenance_mode_end_by_id` (by maintenance schedule)."""
+        body_json = body.model_dump(by_alias=True, exclude_none=True)
+        extra_headers = {}
+        if override_organization_id is not None:
+            extra_headers["OverrideManagedOrganizationId"] = override_organization_id
+        client = await get_client()
+        return await client.request(
+            "POST",
+            "/portalapi/MaintenanceMode/MaintenanceModeUpdateEndDateTimeForSpecificDate",
+            organization_id=organization_id,
+            json=body_json,
+            extra_headers=extra_headers or None,
+        )

@@ -252,3 +252,37 @@ def register(mcp: FastMCP) -> None:
             json=body_json,
             extra_headers=extra_headers or None,
         )
+
+    @mcp.tool(
+        name="computer_update_to_finish_maintenance_mode",
+        description="End Maintenance Mode Ends ACTIVE maintenance mode on a specific computer immediately. Distinct from `maintenance_mode_end_by_id`, which ends a SCHEDULED maintenance window (in progress or not) identified by `maintenanceModeId`. Use this when you have a `computerId` and want enforcement re-enabled now. WARNING: may break in-progress installs.",
+    )
+    async def computer_update_to_finish_maintenance_mode(
+        body: Annotated[
+            models.ComputerUpdateToFinishMaintenanceModeDto, Field(description="Request body.")
+        ],
+        organization_id: Annotated[
+            str | None,
+            Field(
+                description="Override the default organization (ManagedOrganizationId header).",
+                default=None,
+            ),
+        ] = None,
+        override_organization_id: Annotated[
+            str | None,
+            Field(description="Optional OverrideManagedOrganizationId header.", default=None),
+        ] = None,
+    ) -> Any:
+        """End Maintenance Mode Ends ACTIVE maintenance mode on a specific computer immediately. Distinct from `maintenance_mode_end_by_id`, which ends a SCHEDULED maintenance window (in progress or not) identified by `maintenanceModeId`. Use this when you have a `computerId` and want enforcement re-enabled now. WARNING: may break in-progress installs."""
+        body_json = body.model_dump(by_alias=True, exclude_none=True)
+        extra_headers = {}
+        if override_organization_id is not None:
+            extra_headers["OverrideManagedOrganizationId"] = override_organization_id
+        client = await get_client()
+        return await client.request(
+            "POST",
+            "/portalapi/Computer/ComputerUpdateToFinishMaintenanceMode",
+            organization_id=organization_id,
+            json=body_json,
+            extra_headers=extra_headers or None,
+        )
