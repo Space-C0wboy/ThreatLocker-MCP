@@ -11,9 +11,9 @@
 > **Unofficial project.** This is an independent, community-built MCP server developed against ThreatLocker's published API documentation. It is **not** an official ThreatLocker product and is not affiliated with, endorsed by, or supported by ThreatLocker, Inc. "ThreatLocker" is a trademark of ThreatLocker, Inc. For official support of the ThreatLocker platform itself, contact ThreatLocker directly.
 
 > [!WARNING]
-> **This server can perform destructive actions against your ThreatLocker environment.**
+> **Beta software — not yet recommended for production environments.** This project is under active development. The tool surface and individual tool body shapes may still change between minor versions, and not every endpoint has been exhaustively exercised against every tenant configuration. Use against a lab or non-production tenant until you're confident in the behavior for your use case.
 >
-> Tools can enable/disable endpoint protection, approve security requests, modify tag membership, end active maintenance windows, approve storage devices, and move computers between organizations. A hallucinated tool argument from your AI assistant could alter your ThreatLocker configuration in ways that affect endpoint security.
+> **This server can also perform destructive actions against your ThreatLocker environment.** Tools can enable/disable endpoint protection, approve security requests, modify tag membership, end active maintenance windows, approve storage devices, and move computers between organizations. A hallucinated tool argument from your AI assistant could alter your ThreatLocker configuration in ways that affect endpoint security.
 >
 > **Recommended posture:**
 > - Try the server against a non-production or lab tenant first.
@@ -121,24 +121,13 @@ Fully quit Claude Desktop (tray icon → **Quit** on Windows; **⌘Q** on macOS)
 #### Pinning to a specific version
 
 ```json
-"args": ["threatlocker-mcp@1.0.0"]
+"args": ["threatlocker-mcp@0.2.0"]
 ```
 
 #### Forcing a refresh
 
 ```json
 "args": ["--refresh", "threatlocker-mcp"]
-```
-
-#### Windows: `PATHEXT` may be required
-
-Claude Desktop does not always pass `PATHEXT` to child processes, which can prevent `uv` from locating helper executables. If the server fails to start with a `not found` style error, add:
-
-```json
-"env": {
-  "PATHEXT": ".COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC;.PY;.PYW",
-  "THREATLOCKER_API_KEY": "..."
-}
 ```
 
 ## Multi-Organization Usage
