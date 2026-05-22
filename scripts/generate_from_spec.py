@@ -258,7 +258,7 @@ SEND_FULL_BODY_OVERRIDES: set[tuple[str, str]] = {
 
 
 CHOSEN_ENDPOINTS: list[tuple[str, str]] = [
-    # Computer (8)
+    # Computer (9)
     ("/portalapi/Computer/ComputerGetByAllParameters", "post"),
     ("/portalapi/Computer/ComputerGetForEditById", "get"),
     ("/portalapi/Computer/ComputerUpdateForEdit", "patch"),
@@ -267,7 +267,8 @@ CHOSEN_ENDPOINTS: list[tuple[str, str]] = [
     ("/portalapi/Computer/ComputerUpdateMaintenanceMode", "post"),
     ("/portalapi/Computer/ComputerMoveToOtherOrganization", "post"),
     ("/portalapi/Computer/ComputerUpdateBaselineRescan", "post"),
-    # ApprovalRequest (8)
+    ("/portalapi/Computer/ComputerUpdateToFinishMaintenanceMode", "post"),
+    # ApprovalRequest (11)
     # Note: AuthorizeForPermitById is intentionally NOT exposed -- 2026-05 probe
     # against a pending elevate request showed it 400s with "Approval Request
     # already actioned by " (empty actor interpolation), even after
@@ -284,6 +285,9 @@ CHOSEN_ENDPOINTS: list[tuple[str, str]] = [
     ("/portalapi/ApprovalRequest/ApprovalRequestUpdateForReject", "post"),
     ("/portalapi/ApprovalRequest/ApprovalRequestUpdateForIgnore", "post"),
     ("/portalapi/ApprovalRequest/ApprovalRequestUpdateForTakeOwnership", "post"),
+    ("/portalapi/ApprovalRequest/ApprovalRequestGetStorageApprovalById", "get"),
+    ("/portalapi/ApprovalRequest/ApprovalRequestPermitStorageApproval", "post"),
+    ("/portalapi/ApprovalRequest/ApprovalRequestGetFileDownloadDetailsById", "get"),
     # ActionLog (4)
     ("/portalapi/ActionLog/ActionLogGetByParametersV2", "post"),
     ("/portalapi/ActionLog/ActionLogGetByIdV2", "get"),
@@ -295,10 +299,11 @@ CHOSEN_ENDPOINTS: list[tuple[str, str]] = [
     # ComputerGroup (2)
     ("/portalapi/ComputerGroup/ComputerGroupGetGroupAndComputer", "get"),
     ("/portalapi/ComputerGroup/ComputerGroupGetDropdownByOrganizationId", "get"),
-    # MaintenanceMode (3)
+    # MaintenanceMode (4)
     ("/portalapi/MaintenanceMode/MaintenanceModeGetByComputerId", "get"),
     ("/portalapi/MaintenanceMode/MaintenanceModeInsert", "post"),
     ("/portalapi/MaintenanceMode/MaintenanceModeEndById", "patch"),
+    ("/portalapi/MaintenanceMode/MaintenanceModeUpdateEndDateTimeForSpecificDate", "post"),
     # Application (5)
     ("/portalapi/Application/ApplicationGetById", "get"),
     ("/portalapi/Application/ApplicationGetMatchingList", "post"),
@@ -316,6 +321,10 @@ CHOSEN_ENDPOINTS: list[tuple[str, str]] = [
     ("/portalapi/Report/ReportGetByOrganizationId", "get"),
     # Organization (1) — list-orgs surfaced as `list_organizations` via TOOL_NAME_OVERRIDES
     ("/portalapi/Organization/OrganizationGetForMoveComputers", "get"),
+    # Tag (3)
+    ("/portalapi/Tag/TagGetById", "get"),
+    ("/portalapi/Tag/TagGetDowndownOptionsByOrganizationId", "get"),
+    ("/portalapi/Tag/TagUpdate", "post"),
 ]
 
 
