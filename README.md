@@ -126,7 +126,7 @@ Fully quit Claude Desktop (tray icon → **Quit** on Windows; **⌘Q** on macOS)
 | **Reports** | 1 | Get by organization |
 | **Organization** | 1 | `list_organizations` — discover org GUIDs this API key can target |
 
-All request bodies are typed Pydantic models (64 generated from the spec), so the AI assistant receives full schema validation and autocomplete. The wire format preserves the original camelCase field names expected by the API.
+All request bodies are typed Pydantic models (63 generated from the spec), so the AI assistant receives full schema validation and autocomplete. The wire format preserves the original camelCase field names expected by the API.
 
 ---
 
