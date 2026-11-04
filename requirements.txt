@@ -152,7 +152,7 @@ pydantic[email]==2.13.4
     #   threatlocker-mcp (pyproject.toml)
 pydantic-core==2.46.4
     # via pydantic
-pydantic-settings==2.14.2
+pydantic-settings==2.15.0
     # via mcp
 pydocket==0.22.0
     # via fastmcp
