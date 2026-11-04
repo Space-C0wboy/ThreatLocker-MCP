@@ -919,7 +919,6 @@ def main() -> int:
         return 2
     with open(resolved, encoding="utf-8") as fh:
         spec = json.load(fh)
-    spec_path = Path(resolved)
 
     # Walk chosen ops to find which schemas we need
     schema_seed: list[str] = []
