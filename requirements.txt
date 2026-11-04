@@ -169,7 +169,7 @@ python-dotenv==1.2.2
     #   fastmcp
     #   pydantic-settings
     #   threatlocker-mcp (pyproject.toml)
-python-json-logger==4.1.0
+python-json-logger==4.2.0
     # via pydocket
 python-multipart==0.0.32
     # via mcp
