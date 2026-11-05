@@ -4,11 +4,11 @@
 #
 #    pip-compile --output-file=requirements.txt pyproject.toml
 #
-annotated-doc==0.0.4
+annotated-doc==0.0.5
     # via typer
-annotated-types==0.7.0
+annotated-types==0.8.0
     # via pydantic
-anyio==4.14.1
+anyio==4.16.0
     # via
     #   httpx
     #   mcp
@@ -20,25 +20,25 @@ attrs==26.1.0
     #   jsonschema
     #   jsonschema-path
     #   referencing
-authlib==1.7.2
+authlib==1.9.2
     # via fastmcp
 backports-tarfile==1.2.0
     # via jaraco-context
-beartype==0.22.9
+beartype==0.23.1
     # via
     #   py-key-value-aio
     #   py-key-value-shared
 burner-redis==0.1.7
     # via pydocket
-cachetools==7.1.4
+cachetools==7.2.8
     # via py-key-value-aio
-certifi==2026.6.17
+certifi==2026.10.23
     # via
     #   httpcore
     #   httpx
-cffi==2.0.0
+cffi==2.1.1
     # via cryptography
-click==8.4.2
+click==8.5.0
     # via uvicorn
 cloudpickle==3.1.2
     # via pydocket
@@ -66,7 +66,7 @@ email-validator==2.3.0
     # via pydantic
 exceptiongroup==1.3.1
     # via fastmcp
-fakeredis[lua]==2.34.1
+fakeredis[lua]==2.40.0
     # via fastmcp
 fastmcp==2.14.7
     # via threatlocker-mcp (pyproject.toml)
@@ -83,7 +83,7 @@ httpx==0.28.1
     #   threatlocker-mcp (pyproject.toml)
 httpx-sse==0.4.3
     # via mcp
-idna==3.18
+idna==3.20
     # via
     #   anyio
     #   email-validator
@@ -95,9 +95,9 @@ jaraco-classes==3.4.0
     # via keyring
 jaraco-context==6.1.2
     # via keyring
-jaraco-functools==4.5.0
+jaraco-functools==4.6.0
     # via keyring
-joserfc==1.7.1
+joserfc==1.7.7
     # via authlib
 jsonref==1.1.0
     # via fastmcp
@@ -121,55 +121,55 @@ more-itertools==11.1.0
     # via
     #   jaraco-classes
     #   jaraco-functools
-openapi-pydantic==0.5.1
+openapi-pydantic==0.6.0
     # via fastmcp
-opentelemetry-api==1.43.0
+opentelemetry-api==1.45.2
     # via pydocket
-packaging==26.2
+packaging==26.3
     # via fastmcp
 pathable==0.6.0
     # via jsonschema-path
 pathvalidate==3.3.1
     # via py-key-value-aio
-platformdirs==4.10.0
+platformdirs==4.12.4
     # via fastmcp
-prometheus-client==0.25.0
+prometheus-client==0.26.0
     # via pydocket
-py-key-value-aio[disk,keyring,memory,redis]==0.3.0
+py-key-value-aio[disk,keyring,memory,redis]==0.4.6
     # via
     #   fastmcp
     #   pydocket
 py-key-value-shared==0.3.0
     # via py-key-value-aio
-pycparser==3.0
+pycparser==3.11
     # via cffi
-pydantic[email]==2.13.4
+pydantic[email]==2.14.2
     # via
     #   fastmcp
     #   mcp
     #   openapi-pydantic
     #   pydantic-settings
     #   threatlocker-mcp (pyproject.toml)
-pydantic-core==2.46.4
+pydantic-core==2.50.2
     # via pydantic
-pydantic-settings==2.14.2
+pydantic-settings==2.15.0
     # via mcp
-pydocket==0.22.0
+pydocket==0.27.1
     # via fastmcp
-pygments==2.20.0
+pygments==2.21.0
     # via
     #   rich
     #   rich-rst
-pyjwt[crypto]==2.13.0
+pyjwt[crypto]==2.15.1
     # via mcp
 pyperclip==1.11.0
     # via fastmcp
-python-dotenv==1.2.2
+python-dotenv==1.2.4
     # via
     #   fastmcp
     #   pydantic-settings
     #   threatlocker-mcp (pyproject.toml)
-python-json-logger==4.1.0
+python-json-logger==4.2.0
     # via pydocket
 python-multipart==0.0.32
     # via mcp
@@ -179,7 +179,7 @@ pywin32-ctypes==0.2.3
     # via keyring
 pyyaml==6.0.3
     # via jsonschema-path
-redis==8.0.1
+redis==8.1.0
     # via
     #   fakeredis
     #   py-key-value-aio
@@ -196,7 +196,7 @@ rich==15.0.0
     #   pydocket
     #   rich-rst
     #   typer
-rich-rst==2.0.2
+rich-rst==2.2.0
     # via cyclopts
 rpds-py==2026.5.1
     # via
@@ -206,15 +206,15 @@ shellingham==1.5.4
     # via typer
 sortedcontainers==2.4.0
     # via fakeredis
-sse-starlette==3.4.5
+sse-starlette==3.5.1
     # via mcp
-starlette==1.3.1
+starlette==1.7.0
     # via
     #   mcp
     #   sse-starlette
-typer==0.26.7
+typer==0.27.3
     # via pydocket
-typing-extensions==4.15.0
+typing-extensions==4.16.0
     # via
     #   anyio
     #   exceptiongroup
@@ -227,20 +227,20 @@ typing-extensions==4.15.0
     #   referencing
     #   starlette
     #   typing-inspection
-typing-inspection==0.4.2
+typing-inspection==0.4.4
     # via
     #   mcp
     #   pydantic
     #   pydantic-settings
-tzdata==2026.2
+tzdata==2026.6
     # via pydocket
-uncalled-for==0.3.2
+uncalled-for==0.4.1
     # via pydocket
-uvicorn==0.49.0
+uvicorn==0.54.0
     # via
     #   fastmcp
     #   mcp
 websockets==16.0
     # via fastmcp
-zipp==4.1.0
+zipp==4.1.2
     # via importlib-metadata
