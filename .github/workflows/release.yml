@@ -51,6 +51,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Verify tag matches pyproject version
+        run: |
+          python3 - <<'EOF'
+          import os, tomllib
+          with open("pyproject.toml", "rb") as f:
+              version = tomllib.load(f)["project"]["version"]
+          tag = os.environ["GITHUB_REF_NAME"].removeprefix("v")
+          assert tag == version, f"tag v{tag} != pyproject version {version}"
+          EOF
       - uses: astral-sh/setup-uv@v7
       - name: Build sdist and wheel
         run: uv build
