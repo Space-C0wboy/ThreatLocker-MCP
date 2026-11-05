@@ -18,7 +18,7 @@ def env(monkeypatch):
 
 async def test_build_server_registers_tools(env):
     mcp = build_server()
-    tools = await mcp.get_tools()
+    tools = {t.name: t for t in await mcp.list_tools()}
     assert "list_organizations" in tools
     assert len(tools) >= 13  # one module per area under tools/; each adds at least one
 
