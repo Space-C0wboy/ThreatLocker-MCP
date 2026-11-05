@@ -40,7 +40,7 @@ Issues = "https://github.com/Space-C0wboy/ThreatLocker-MCP/issues"
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0.0,<9.0",
+    "pytest>=8.0.0,<10.0",
     "pytest-asyncio>=0.23.0,<2.0",
     "pytest-httpx>=0.30.0,<1.0",
     "ruff==0.17.3",
