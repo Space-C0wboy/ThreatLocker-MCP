@@ -328,6 +328,20 @@ SEND_FULL_BODY_OVERRIDES: set[tuple[str, str]] = {
 }
 
 
+# Tool modules that are maintained by hand because their endpoints are documented
+# only in the ThreatLocker KB (not in the public swagger). The generator never
+# deletes these and always registers them in tools/__init__.py. Names starting
+# with "_" are shared helpers that are kept but not registered.
+HAND_WRITTEN_TOOL_MODULES: frozenset[str] = frozenset(
+    {
+        "_params",
+        "action_log_analytics",
+        "application_management",
+        "policy_management",
+    }
+)
+
+
 CHOSEN_ENDPOINTS: list[tuple[str, str]] = [
     # Computer (9)
     ("/portalapi/Computer/ComputerGetByAllParameters", "post"),
@@ -950,10 +964,11 @@ def main() -> int:
     tools_dir = pkg_dir / "tools"
     tools_dir.mkdir(exist_ok=True)
 
-    # Clear out old tool modules (everything but __init__.py). Log each unlink so
-    # a developer who dropped a hand-edited file in tools/ sees it disappear.
+    # Clear out old generated tool modules. Hand-written modules listed in
+    # HAND_WRITTEN_TOOL_MODULES (and __init__.py) are preserved. Log each unlink so
+    # a developer who dropped an unlisted hand-edited file in tools/ sees it disappear.
     for f in tools_dir.glob("*.py"):
-        if f.name != "__init__.py":
+        if f.name != "__init__.py" and f.stem not in HAND_WRITTEN_TOOL_MODULES:
             print(f"Removing stale tool module {f.name}", file=sys.stderr)
             f.unlink()
 
@@ -965,10 +980,14 @@ def main() -> int:
         (tools_dir / f"{module_name}.py").write_text(out, encoding="utf-8")
         print(f"Wrote tools/{module_name}.py ({len(ops)} tools)", file=sys.stderr)
 
-    # Write tools/__init__.py
-    mod_names = [mod for _tag, mod in tag_modules]
+    # Write tools/__init__.py — generated modules plus the hand-written ones.
+    mod_names = sorted(
+        {mod for _tag, mod in tag_modules}
+        | {m for m in HAND_WRITTEN_TOOL_MODULES if not m.startswith("_")}
+    )
     init_lines = [
-        '"""Generated tool registry."""',
+        '"""Tool registry (generated modules plus the hand-written management modules)."""',
+        "",
         "from fastmcp import FastMCP",
         "",
         "from . import (",

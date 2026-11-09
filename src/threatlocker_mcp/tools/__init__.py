@@ -1,10 +1,12 @@
-"""Generated tool registry."""
+"""Tool registry (generated modules plus the hand-written management modules)."""
 
 from fastmcp import FastMCP
 
 from . import (
     action_log,
+    action_log_analytics,
     application,
+    application_management,
     approval_request,
     computer,
     computer_group,
@@ -12,6 +14,7 @@ from . import (
     online_devices,
     organization,
     policy,
+    policy_management,
     report,
     system_audit,
     tag,
@@ -20,7 +23,9 @@ from . import (
 
 def register_all(mcp: FastMCP) -> None:
     action_log.register(mcp)
+    action_log_analytics.register(mcp)
     application.register(mcp)
+    application_management.register(mcp)
     approval_request.register(mcp)
     computer.register(mcp)
     computer_group.register(mcp)
@@ -28,6 +33,7 @@ def register_all(mcp: FastMCP) -> None:
     online_devices.register(mcp)
     organization.register(mcp)
     policy.register(mcp)
+    policy_management.register(mcp)
     report.register(mcp)
     system_audit.register(mcp)
     tag.register(mcp)

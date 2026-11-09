@@ -120,11 +120,18 @@ class ThreatLockerClient:
         params: dict[str, Any] | None = None,
         json: Any | None = None,
         extra_headers: dict[str, str] | None = None,
+        include_headers: bool = False,
     ) -> Any:
         """Send a request and return parsed JSON (or raw text if not JSON).
 
         Retries up to _MAX_RETRIES times on transient errors (network failures
         and 5xx / 429 responses) with exponential backoff (1 s, 2 s, …).
+
+        When ``include_headers`` is true the return value is a
+        ``(payload, headers)`` tuple, where ``headers`` is a plain dict of the
+        response headers (lower-cased names). Some ThreatLocker endpoints —
+        notably ActionLogGetByParametersV2 — report paging totals only in
+        response headers.
         """
         if self._client is None:
             await self.connect()
@@ -193,6 +200,11 @@ class ThreatLockerClient:
                 )
                 raise ThreatLockerAPIError(response.status_code, message, body)
 
+            response_headers = {k.lower(): v for k, v in response.headers.items()}
+
+            def _finish(payload: Any, _headers: dict[str, str] = response_headers) -> Any:
+                return (payload, _headers) if include_headers else payload
+
             if not response.content:
                 # Some ThreatLocker endpoints (e.g. ActionLog/ApprovalRequest searches with no
                 # matching rows) return HTTP 200 with an empty body. Surface that explicitly
@@ -203,7 +215,7 @@ class ThreatLockerClient:
                     path,
                     response.status_code,
                 )
-                return {"_empty_response": True, "_status_code": response.status_code}
+                return _finish({"_empty_response": True, "_status_code": response.status_code})
 
             ctype = response.headers.get("content-type", "")
             if "application/json" in ctype:
@@ -219,9 +231,9 @@ class ThreatLockerClient:
                         path,
                         response.status_code,
                     )
-                    return {"_empty_response": True, "_status_code": response.status_code}
-                return parsed
-            return response.text
+                    return _finish({"_empty_response": True, "_status_code": response.status_code})
+                return _finish(parsed)
+            return _finish(response.text)
 
         # Unreachable — the last iteration always raises or returns.
         raise ThreatLockerAPIError(0, "Max retries exceeded")  # pragma: no cover

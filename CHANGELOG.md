@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Application management tools** (`application_list`, `application_files_list`, `application_insert`, `application_update`, `application_add_sha256_bulk`, `application_delete`) wrapping the KB-documented `Application/*` and `ApplicationFile/*` endpoints. File rules are modelled as a list of conditions (full path / process path / created by / cert combinable; hash and SHA256 standalone).
+- **Policy management tools** (`policy_list`, `policy_insert`, `policy_update`, `policy_set_order`, `policy_delete`, `policies_deploy`) wrapping `Policy/PolicyGetByParameters`, `PolicyInsert`, `PolicyUpdateById`, `PolicyUpdateForDeleteByIds` and `DeployPolicyQueue/DeployPolicies`.
+- **`action_log_search`**: explicit paging with totals from the response headers, `fields` projection, and `aggregate_by` counts (server-side `groupBys` or client-side folder roll-up).
+- **Write-safety layer** (`write_safety.py`): `dry_run` defaults to true on every write, explicit `organization_id` required for any non-default org, `confirm=true` required for deploy / delete / rule removal, and a local JSON-lines audit log (`THREATLOCKER_AUDIT_LOG`).
+
+### Changed
+- `ThreatLockerClient.request` accepts `include_headers=True` to return `(payload, headers)`.
+- `scripts/generate_from_spec.py` preserves and registers the hand-written tool modules on regeneration.
+
 ## [0.2.3] - 2026-11-05
 
 0.2.2 went out on PyPI by mistake before testing and was yanked; 0.2.3 is the first stable release of these changes.
