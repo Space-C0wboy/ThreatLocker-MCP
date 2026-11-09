@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Write-safety layer** (`write_safety.py`): `dry_run` defaults to true on every write, explicit `organization_id` required for any non-default org, `confirm=true` required for deploy / delete / rule removal, and a local JSON-lines audit log (`THREATLOCKER_AUDIT_LOG`).
 
 ### Changed
+- `policy_list` compact rows map the API's `entityTypeId` (1 org, 2 group, 3 computer) to `policyLevel` and `lastMatchDateTime` to `lastMatch`, matching the shape `PolicyGetByParameters` actually returns (verified live against a non-production org).
 - `ThreatLockerClient.request` accepts `include_headers=True` to return `(payload, headers)`.
 - `scripts/generate_from_spec.py` preserves and registers the hand-written tool modules on regeneration.
 

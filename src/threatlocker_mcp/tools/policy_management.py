@@ -93,9 +93,23 @@ _COMPACT_GROUPS: dict[str, tuple[str, ...]] = {
     "isEnabled": ("isEnabled", "enabled", "isActive", "status"),
     "appliesToId": ("appliesToId", "computerGroupId"),
     "appliesToName": ("appliesToName", "appliesTo", "computerGroupName", "groupName"),
-    "policyLevel": ("policyLevel", "appliesToLevel", "level", "entityType", "appliesToType"),
-    "lastMatch": ("lastMatch", "lastMatched", "dateLastMatched", "lastMatchDate", "lastHit"),
-    "applications": ("applicationNames", "applications", "applicationList", "applicationName"),
+    "policyLevel": (
+        "entityTypeId",  # what PolicyGetByParameters actually returns (1 org, 2 group, 3 computer)
+        "policyLevel",
+        "appliesToLevel",
+        "level",
+        "entityType",
+        "appliesToType",
+    ),
+    "lastMatch": (
+        "lastMatchDateTime",  # what PolicyGetByParameters actually returns
+        "lastMatch",
+        "lastMatched",
+        "dateLastMatched",
+        "lastMatchDate",
+        "lastHit",
+    ),
+    "applications": ("applicationList", "applicationNames", "applications", "applicationName"),
     "osType": ("osType",),
     "organizationId": ("organizationId",),
     "description": ("description",),

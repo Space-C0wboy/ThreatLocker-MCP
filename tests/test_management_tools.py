@@ -735,10 +735,22 @@ async def test_policy_list_default_body_and_compact_projection(tools, httpx_mock
                 "policyActionId": 1,
                 "isEnabled": True,
                 "appliesToId": OTHER_ORG,
-                "lastMatch": "2026-11-01T00:00:00Z",
+                "lastMatchDateTime": "2026-11-01T00:00:00Z",
                 "totalRows": 1,
                 "noise": "x",
-            }
+            },
+            {
+                "policyId": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+                "name": "Computer-level",
+                "orderBy": -15,
+                "policyActionId": 2,
+                "isEnabled": True,
+                "appliesToId": "ff000000-0000-0000-0000-000000000001",
+                "appliesToName": "PC-1",
+                "entityTypeId": 3,
+                "lastMatchDateTime": None,
+                "applicationList": [{"name": "App", "applicationId": APP_ID}],
+            },
         ],
     )
     result = await tools("policy_list", organization_id=OTHER_ORG, include_inactive=True)
@@ -753,11 +765,16 @@ async def test_policy_list_default_body_and_compact_projection(tools, httpx_mock
         "showAllPolicies": False,
     }
     assert result["total"] == 1
-    [row] = result["policies"]
+    row, computer_row = result["policies"]
     assert row["action"] == "permit"
     assert row["policyLevel"] == "organization"
     assert row["lastMatch"] == "2026-11-01T00:00:00Z"
     assert "noise" not in row
+    # Shape observed live: entityTypeId 3 == computer, lastMatchDateTime, applicationList.
+    assert computer_row["action"] == "deny"
+    assert computer_row["policyLevel"] == "computer"
+    assert computer_row["appliesToName"] == "PC-1"
+    assert computer_row["applications"] == [{"name": "App", "applicationId": APP_ID}]
 
 
 async def test_policy_list_by_application_uses_view_endpoint(tools, httpx_mock):
