@@ -23,7 +23,7 @@ attrs==26.1.0
     #   jsonschema
     #   jsonschema-path
     #   referencing
-authlib==1.9.2
+authlib==1.9.5
     # via fastmcp-slim
 beartype==0.23.1
     # via py-key-value-aio
@@ -38,7 +38,7 @@ certifi==2026.10.23
     #   httpx
 cffi==2.1.1
     # via cryptography
-click==8.5.0
+click==8.5.1
     # via uvicorn
 cryptography==50.0.2
     # via
@@ -122,7 +122,7 @@ py-key-value-aio[filetree,memory]==0.4.6
     # via fastmcp-slim
 pycparser==3.11
     # via cffi
-pydantic[email]==2.14.2
+pydantic[email]==2.14.3
     # via
     #   fastmcp-slim
     #   mcp
@@ -130,7 +130,7 @@ pydantic[email]==2.14.2
     #   openapi-pydantic
     #   pydantic-settings
     #   threatlocker-mcp (pyproject.toml)
-pydantic-core==2.50.2
+pydantic-core==2.50.4
     # via pydantic
 pydantic-settings==2.15.0
     # via fastmcp-slim
@@ -199,12 +199,12 @@ typing-extensions==4.16.0
     #   referencing
     #   starlette
     #   typing-inspection
-typing-inspection==0.4.4
+typing-inspection==0.4.5
     # via
     #   mcp
     #   pydantic
     #   pydantic-settings
-uncalled-for==0.4.1
+uncalled-for==0.5.0
     # via fastmcp-slim
 uvicorn==0.54.0
     # via
