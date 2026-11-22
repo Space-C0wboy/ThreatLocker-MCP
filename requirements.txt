@@ -48,7 +48,7 @@ cryptography==50.0.2
     #   threatlocker-mcp (pyproject.toml)
 cyclopts==4.25.3
     # via fastmcp-slim
-dnspython==2.8.0
+dnspython==2.9.2
     # via email-validator
 docstring-parser==0.18.0
     # via cyclopts
