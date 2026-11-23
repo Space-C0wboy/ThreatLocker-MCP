@@ -39,3 +39,6 @@ env/
 # OS
 .DS_Store
 Thumbs.db
+
+# Dependency pins live in requirements.txt; uv.lock is a local artefact
+uv.lock
