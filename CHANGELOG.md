@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-22
+
 ### Added
 - **Application management tools** (`application_list`, `application_files_list`, `application_insert`, `application_update`, `application_add_sha256_bulk`, `application_delete`) wrapping the KB-documented `Application/*` and `ApplicationFile/*` endpoints. File rules are modelled as a list of conditions (full path / process path / created by / cert combinable; hash and SHA256 standalone).
 - **Policy management tools** (`policy_list`, `policy_insert`, `policy_update`, `policy_set_order`, `policy_delete`, `policies_deploy`) wrapping `Policy/PolicyGetByParameters`, `PolicyInsert`, `PolicyUpdateById`, `PolicyUpdateForDeleteByIds` and `DeployPolicyQueue/DeployPolicies`.
@@ -17,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `policy_list` compact rows map the API's `entityTypeId` (1 org, 2 group, 3 computer) to `policyLevel` and `lastMatchDateTime` to `lastMatch`, matching the shape `PolicyGetByParameters` actually returns (verified live against a non-production org).
 - `ThreatLockerClient.request` accepts `include_headers=True` to return `(payload, headers)`.
 - `scripts/generate_from_spec.py` preserves and registers the hand-written tool modules on regeneration.
+- `threatlocker_mcp.__version__` now reads the installed package version instead of a stale hard-coded `0.1.0`.
+- Dependency updates: cachetools 7.3.0, a grouped minor/patch batch, and weekly security fixes.
 
 ## [0.2.3] - 2026-11-05
 
